@@ -1,0 +1,19 @@
+{
+  "feelingLucky": "運試し",
+  "luckyTipTitle": "ラッキーティップ",
+  "luckyPhrases": [
+    "まさに今、この瞬間にあなたの確率はピークだと言われています。試してみますか？",
+    "30 POLを失う恐れが、あなたがまだ裕福でない理由です。"
+  ],
+  "events": {
+    "deposited": "がプールに30POLを入れました",
+    "bought": "が3枚のチケットを購入しました",
+    "depositedLarge": "がプールに90POLを入れました",
+    "depositedShort": "が30POLを入れました"
+  },
+  "liveFeed": "Live feed:",
+  "ticketsBought": "購入したチケット",
+  "collectingTo": "プール収集先",
+  "eachTicketIncreases": "チケットごとにジャックポットが増えます。",
+  "myTickets": "私のチケット"
+}

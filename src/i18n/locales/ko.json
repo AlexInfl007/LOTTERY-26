@@ -1,0 +1,19 @@
+{
+  "feelingLucky": "운이 좋다",
+  "luckyTipTitle": "행운의 팁",
+  "luckyPhrases": [
+    "바로 이 순간, 당신의 확률이 정점에 있다는 소문이 있습니다. 확인해볼까요?",
+    "30 POL을 잃는 것이 두려워서 당신은 아직 부자가 되지 못했습니다."
+  ],
+  "events": {
+    "deposited": "풀에 30POL을 입금했습니다",
+    "bought": "3장 티켓을 구매했습니다",
+    "depositedLarge": "풀에 90POL을 입금했습니다",
+    "depositedShort": "30POL 입금"
+  },
+  "liveFeed": "Live feed:",
+  "ticketsBought": "구매한 티켓",
+  "collectingTo": "풀 수집 목표",
+  "eachTicketIncreases": "각 티켓은 잭팟을 증가시킵니다.",
+  "myTickets": "내 티켓"
+}

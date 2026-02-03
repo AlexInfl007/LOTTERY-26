@@ -1,0 +1,19 @@
+{
+  "feelingLucky": "我很幸运",
+  "luckyTipTitle": "幸运提示",
+  "luckyPhrases": [
+    "据说就在这一秒，你的几率达到了顶峰。试试吗？",
+    "害怕失去30 POL，是你还没变富的原因。"
+  ],
+  "events": {
+    "deposited": "向奖池存入了30POL",
+    "bought": "购买了3张彩票",
+    "depositedLarge": "向奖池存入了90POL",
+    "depositedShort": "存入了30POL"
+  },
+  "liveFeed": "Live feed:",
+  "ticketsBought": "购票数",
+  "collectingTo": "收集池到",
+  "eachTicketIncreases": "每张彩票都会增加奖池。",
+  "myTickets": "我的彩票"
+}

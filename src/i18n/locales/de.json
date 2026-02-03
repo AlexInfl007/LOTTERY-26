@@ -1,0 +1,19 @@
+{
+  "feelingLucky": "Ich fühle mich Glücklich",
+  "luckyTipTitle": "Glückstipp",
+  "luckyPhrases": [
+    "Man sagt, in dieser Sekunde sind deine Chancen am höchsten. Probieren wir es?",
+    "Die Angst, 30 POL zu verlieren, ist der Grund, warum du nicht reich bist."
+  ],
+  "events": {
+    "deposited": "hat 30POL in den Pool eingezahlt",
+    "bought": "hat 3 Tickets gekauft",
+    "depositedLarge": "hat 90POL in den Pool eingezahlt",
+    "depositedShort": "hat 30POL eingezahlt"
+  },
+  "liveFeed": "Live feed:",
+  "ticketsBought": "gekaufte Tickets",
+  "collectingTo": "Sammelt Pool bis",
+  "eachTicketIncreases": "Jedes Ticket erhöht den Jackpot.",
+  "myTickets": "Meine Tickets"
+}

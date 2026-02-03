@@ -1,0 +1,74 @@
+{
+  "siteName": "Seren Lottery Chain",
+  "subtitle": "Verifiable Randomness — Fair Wins",
+  "connectWallet": "Connect Wallet",
+  "connected": "Connected",
+  "disconnect": "Disconnect",
+  "currentJackpot": "Current Jackpot",
+  "poolProgress": "Pool progress — how much has been collected",
+  "participate": "Participate — 30 POL",
+  "feelingLucky": "Feeling Lucky",
+  "luckyTipTitle": "Lucky tip",
+  "howItWorks": "How it works",
+  "howTitle": "How to win the jackpot in 3 steps?",
+  "howSteps": [
+    {
+      "title": "Connect wallet and deposit 30POL",
+      "text": "Your 30POL instantly tops up the pool and you automatically join the draw for 90% of the pool."
+    },
+    {
+      "title": "Wait for your star moment",
+      "text": "The pool grows with each participant, increasing your potential prize. The draw happens when the pool is filled."
+    },
+    {
+      "title": "Victory!",
+      "text": "The smart contract using Chainlink VRF picks a random winner. Prize is automatically sent to the wallet. Results are tamper-proof."
+    }
+  ],
+  "footerNote": "Provable randomness powered by Chainlink VRF",
+  "buyTicket": "Buy Ticket",
+  "prizePool": "Prize Pool",
+  "round": "Round",
+  "luckyPhrases": [
+    "They say at this very second your odds are at their peak. Shall we test it?",
+    "The fear of losing 30 POL is the reason you're not rich yet.",
+    "This click might be worth more than all your previous ones combined.",
+    "That feeling when the wallet is connected and your finger hovers over the button — priceless.",
+    "One click and you're in. It's not about if you'll win, it's what you'll buy with the jackpot.",
+    "Imagine your friends’ faces when you say you won in a crypto lottery.",
+    "The most expensive adrenaline in the world is free until you see your prize.",
+    "A sign from the future: you've already won. Confirm it now.",
+    "They say jackpots fear the decisive. Prove them right.",
+    "Your future bio starts with this click. Shall we write it together?",
+    "There are 7 billion people; this ticket could be yours.",
+    "Will you have the courage to accept your prize? The first step is right here.",
+    "Jackpots aren’t luck — they’re math probabilities you can lead.",
+    "Think: someone will win. Why not you?",
+    "Legends were here once. It’s your turn.",
+    "Time isn’t linear. This moment exists in futures where you’re rich.",
+    "Your wallet is the key. This button is the door. What’s stopping you?",
+    "The biggest risk is not taking any.",
+    "Luck favors the bold — and those who press cool buttons.",
+    "Life’s too short to postpone your revolution.",
+    "The gods of chance are watching you now. Don’t disappoint them.",
+    "What separates you from a new life is the space between your finger and this button.",
+    "Warning: pressing may cause sudden enrichment.",
+    "Doubt has stolen more opportunities than failure ever did. Don’t let it.",
+    "You don’t play luck — you command it with technology.",
+    "History remembers the ones who dared. Be remembered.",
+    "What if this is the moment you'll tell your grandkids about?",
+    "Activate 'What if?'. What if I press?",
+    "Wallet connected. Fate in play. Answer the call."
+  ],
+  "events": {
+    "deposited": "deposited 30POL into the pool",
+    "bought": "bought 3 tickets",
+    "depositedLarge": "deposited 90POL into the pool",
+    "depositedShort": "deposited 30POL"
+  },
+  "liveFeed": "Live feed:",
+  "ticketsBought": "tickets bought",
+  "collectingTo": "Collecting pool to",
+  "eachTicketIncreases": "Each ticket increases the jackpot.",
+  "myTickets": "My tickets"
+}

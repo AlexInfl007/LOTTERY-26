@@ -1,0 +1,39 @@
+{
+  "currentJackpot": "Bote actual",
+  "subtitle": "Aleatoriedad verificable — Victorias justas",
+  "feelingLucky": "Me siento afortunado",
+  "luckyTipTitle": "Consejo de suerte",
+  "luckyPhrases": [
+    "Dicen que en este segundo tus probabilidades son máximas. ¿Lo comprobamos?",
+    "El miedo a perder 30 POL es la razón por la que aún no eres rico.",
+    "Este clic puede valer más que todos tus anteriores juntos.",
+    "Esa sensación cuando la cartera está conectada y tu dedo flota sobre el botón — invaluable.",
+    "Un clic y estás dentro. No se trata de si ganarás, sino de qué comprarás con el premio."
+  ],
+  "events": {
+    "deposited": "depositó 30POL en el pozo",
+    "bought": "compró 3 boletos",
+    "depositedLarge": "depositó 90POL en el pozo",
+    "depositedShort": "depositó 30POL"
+  },
+  "liveFeed": "Live feed:",
+  "ticketsBought": "boletos comprados",
+  "collectingTo": "Reuniendo el pozo hasta",
+  "eachTicketIncreases": "Cada boleto aumenta el bote.",
+  "myTickets": "Mis boletos",
+  "howTitle": "¿Cómo ganar el bote en 3 pasos?",
+  "howSteps": [
+    {
+      "title": "Conecta la cartera y deposita 30POL",
+      "text": "Tus 30POL llenan instantáneamente el pozo y te unes automáticamente al sorteo del 90%."
+    },
+    {
+      "title": "Espera tu momento estelar",
+      "text": "El pozo crece con cada participante, aumentando tu premio potencial. El sorteo se realizará cuando el pozo esté completo."
+    },
+    {
+      "title": "¡Victoria!",
+      "text": "El contrato inteligente con Chainlink VRF elige un ganador aleatorio. El premio se envía automáticamente a la cartera."
+    }
+  ]
+}

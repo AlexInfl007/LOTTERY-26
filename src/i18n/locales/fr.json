@@ -1,0 +1,34 @@
+{
+  "feelingLucky": "Je me sens chanceux",
+  "luckyTipTitle": "Conseil de chance",
+  "luckyPhrases": [
+    "On dit qu'à cette seconde vos chances sont à leur maximum. On teste ?",
+    "La peur de perdre 30 POL est la raison pour laquelle vous n'êtes pas encore riche."
+  ],
+  "events": {
+    "deposited": "a déposé 30POL dans le pool",
+    "bought": "a acheté 3 billets",
+    "depositedLarge": "a déposé 90POL dans le pool",
+    "depositedShort": "a déposé 30POL"
+  },
+  "liveFeed": "Live feed:",
+  "ticketsBought": "billets achetés",
+  "collectingTo": "Collecte du pool jusqu'à",
+  "eachTicketIncreases": "Chaque billet augmente le jackpot.",
+  "myTickets": "Mes billets",
+  "howTitle": "Comment décrocher le jackpot en 3 étapes ?",
+  "howSteps": [
+    {
+      "title": "Connectez le wallet et déposez 30POL",
+      "text": "Vos 30POL alimentent instantanément le pool et vous participez automatiquement au tirage de 90%."
+    },
+    {
+      "title": "Attendez votre heure de gloire",
+      "text": "Le pool grandit à chaque participant."
+    },
+    {
+      "title": "Victoire !",
+      "text": "Chainlink VRF choisit un gagnant aléatoire. Le gain est envoyé automatiquement."
+    }
+  ]
+}

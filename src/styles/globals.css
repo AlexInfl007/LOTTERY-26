@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+
+:root{
+  --bg-dark: #2E004E;
+  --panel: #3C0068;
+  --txt-white: #FFFFFF;
+  --txt-muted: #CFCFCF;
+  --accent: #A855F7;
+  --button-pink: linear-gradient(90deg,#A855F7,#F472B6);
+  --yellow: #FFD166;
+}
+
+* { box-sizing: border-box; }
+html,body,#root { height:100%; }
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+  background: linear-gradient(180deg, var(--bg-dark) 0%, #1a0533 100%);
+  color: var(--txt-white);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+/* small utilities */
+.container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+/* Modal styles used by LuckyButton */
+.modalOverlay {
+  position: fixed;
+  z-index: 60;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.modalBox {
+  background: var(--panel);
+  padding: 18px;
+  border-radius: 12px;
+  max-width: 420px;
+  width: 90%;
+  color: var(--txt-white);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.modalCloseBtn {
+  background: linear-gradient(90deg,#A855F7,#F472B6);
+  color: white;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 700;
+}
+
