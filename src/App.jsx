@@ -10,38 +10,175 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
+import { readPrizePool, getCurrentRound, getUserTickets, buyTicket, getWinners, watchTicketEvents, watchWinnerEvents } from "./utils/ethersUtils";
+import { ethers } from 'ethers';
 
 export default function App() {
   const { t } = useTranslation();
 
-  const [poolAmount, setPoolAmount] = useState(300.0);
+  const [poolAmount, setPoolAmount] = useState(0.0); // Start with 0 since we'll fetch from contract
   const poolTarget = 1000000;
-  const [ticketsBought, setTicketsBought] = useState(12);
-  const [myTickets, setMyTickets] = useState(2);
+  const [ticketsBought, setTicketsBought] = useState(0); // Will be fetched from contract
+  const [myTickets, setMyTickets] = useState(0); // Will be fetched based on connected wallet
   const [feed, setFeed] = useState([]);
+  const [currentRound, setCurrentRound] = useState(1);
+  const [walletAddress, setWalletAddress] = useState(null);
+  const [winnersList, setWinnersList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // simulate Live Feed updates (demo). Keep last 15 events
+  // Get wallet address from window.ethereum if available
   useEffect(() => {
-    const interval = setInterval(() => {
-      const sample = [
-        `0xA8b… ${t("events.deposited", "внес 30POL в пул")}`,
-        `0xF7c… ${t("events.deposited", "внес 30POL в пул")}`,
-        `0xD4e… ${t("events.bought", "купил 3 билета")}`,
-        `0xB2a… ${t("events.depositedLarge", "внес 90POL в пул")}`
-      ];
-      setFeed(prev => [sample[Math.floor(Math.random()*sample.length)], ...prev].slice(0,15));
-      setPoolAmount(p => Math.min(poolTarget, +(p + Math.random()*50).toFixed(2)));
-      setTicketsBought(t => t + Math.floor(Math.random()*3));
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [t]);
+    const getWalletAddress = async () => {
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+          }
+        } catch (e) {
+          console.error("Error getting wallet address:", e);
+        }
+      }
+    };
+    
+    getWalletAddress();
+    
+    // Also listen for account changes
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+        } else {
+          setWalletAddress(null);
+        }
+      });
+    }
+  }, []);
 
-  const handleParticipate = () => {
-    setMyTickets(t => t + 1);
-    setTicketsBought(t => t + 1);
-    setPoolAmount(p => +(p + 30).toFixed(2));
-    setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
+  // Fetch initial data from smart contract
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const pool = await readPrizePool();
+        const round = await getCurrentRound();
+        const winners = await getWinners();
+        
+        setPoolAmount(pool);
+        setCurrentRound(round);
+        setWinnersList(winners);
+        
+        if (walletAddress) {
+          const userTickets = await getUserTickets(walletAddress);
+          setMyTickets(userTickets);
+        }
+      } catch (error) {
+        console.error("Error fetching data from contract:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    
+    // Refresh data periodically
+    const interval = setInterval(fetchData, 10000); // Every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [walletAddress]);
+
+  // Subscribe to events
+  useEffect(() => {
+    let unsubscribeTicketEvents = null;
+    let unsubscribeWinnerEvents = null;
+
+    const setupEventListeners = () => {
+      unsubscribeTicketEvents = watchTicketEvents((msg) => {
+        setFeed(prev => [msg, ...prev].slice(0,15));
+      });
+
+      unsubscribeWinnerEvents = watchWinnerEvents((msg) => {
+        setFeed(prev => [msg, ...prev].slice(0,15));
+        // Refresh winners list when a new winner is announced
+        getWinners().then(setWinnersList);
+      });
+    };
+
+    setupEventListeners();
+
+    return () => {
+      if (unsubscribeTicketEvents) unsubscribeTicketEvents();
+      if (unsubscribeWinnerEvents) unsubscribeWinnerEvents();
+    };
+  }, []);
+
+  // Update user tickets when wallet address changes
+  useEffect(() => {
+    if (walletAddress) {
+      getUserTickets(walletAddress).then(setMyTickets);
+    } else {
+      setMyTickets(0);
+    }
+  }, [walletAddress]);
+
+  const handleParticipate = async () => {
+    if (!walletAddress) {
+      alert("Please connect your wallet first");
+      return;
+    }
+
+    try {
+      // Get the signer from the connected wallet
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // Calculate the value to send (0.01 ETH/0.01 POL for example)
+      // The exact price should come from the smart contract if available
+      // For now, we'll use 0.01 ETH as the ticket price
+      const ticketPrice = ethers.parseEther("0.01"); // 0.01 POL/ETH
+      
+      const result = await buyTicket(currentRound, ticketPrice, signer);
+      
+      if (result.success) {
+        // Update UI immediately, then refresh from contract after a delay
+        setMyTickets(t => t + 1);
+        setTicketsBought(t => t + 1);
+        setPoolAmount(p => +(p + 0.01).toFixed(2)); // Approximate update
+        
+        // Add to feed
+        setFeed(prev => [`You bought a ticket for 0.01 POL`, ...prev].slice(0,15));
+        
+        // Wait a bit then refresh from contract
+        setTimeout(async () => {
+          const pool = await readPrizePool();
+          const userTickets = await getUserTickets(walletAddress);
+          
+          setPoolAmount(pool);
+          setMyTickets(userTickets);
+        }, 2000);
+      } else {
+        alert(`Transaction failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error buying ticket:", error);
+      alert(`Error buying ticket: ${error.message}`);
+    }
   };
+
+  // Simple way to estimate tickets bought based on pool size
+  // In reality, this should come from the contract if available
+  useEffect(() => {
+    // Estimate based on average ticket price
+    const estimatedTickets = Math.round(poolAmount * 100); // Assuming ~0.01 POL per ticket
+    setTicketsBought(estimatedTickets);
+  }, [poolAmount]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-bg-dark via-panel to-[#1a0533] text-white flex items-center justify-center">
+        <div className="text-2xl">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-bg-dark via-panel to-[#1a0533] text-white flex flex-col">
@@ -67,7 +204,7 @@ export default function App() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h2 className="text-lg md:text-2xl font-bold">{t("currentJackpot", "Текущий джекпот")}</h2>
-                  <div className="text-sm text-gray-300">Round: 1</div>
+                  <div className="text-sm text-gray-300">Round: {currentRound}</div>
                 </div>
                 <div className="text-sm text-gray-300">{t("ticketsBought", "билетов куплено")}: {ticketsBought}</div>
               </div>
@@ -81,7 +218,7 @@ export default function App() {
 
               <div className="flex gap-4 justify-center mt-6 flex-wrap">
                 <button onClick={handleParticipate} className="bg-gradient-to-r from-[#A855F7] to-[#F472B6] px-6 py-3 rounded-xl font-bold shadow-lg text-sm md:text-base transform hover:scale-105 transition">
-                  {t("participate", "Участвовать — 30 POL")}
+                  {t("participate", "Участвовать — 0.01 POL")}
                 </button>
 
                 <LuckyButton />
@@ -94,7 +231,7 @@ export default function App() {
           </div>
 
           <aside className="space-y-6">
-            <Winners winners={[]} />
+            <Winners winners={winnersList} />
 
             <div className="bg-white/5 border border-white/6 p-4 rounded-2xl shadow-xl">
               <h4 className="font-bold mb-2 text-lg">{t("liveFeed", "Live feed:")}</h4>
