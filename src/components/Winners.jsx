@@ -15,8 +15,7 @@ export default function Winners({ winners = [] }) {
         ) : (
           winners.slice(0, 15).map((w, i) => (
             <div key={i} className={styles.winnerRow}>
-              <span className={styles.winnerAddr}>{abbr(w.address)}</span>
-              <span className={styles.winnerRound}>#{w.round}</span>
+              <span className={styles.winnerAddr}>{abbr(w)}</span>
             </div>
           ))
         )}
