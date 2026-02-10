@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ethers } from "ethers";
+import { ethers, BrowserProvider } from "ethers";
 
 import PoolProgressBar from "./components/PoolProgressBar";
 import WalletConnect from "./components/WalletConnect";
@@ -21,8 +21,10 @@ export default function App() {
   const { t } = useTranslation();
 
   const [provider, setProvider] = useState(null);
+  const [signer, setSigner] = useState(null);
   const [contract, setContract] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
+  const [readOnlyContract, setReadOnlyContract] = useState(null);
   
   const [poolAmount, setPoolAmount] = useState(0);
   const poolTarget = 1000000;
@@ -30,7 +32,7 @@ export default function App() {
   const [myTickets, setMyTickets] = useState(0);
   const [feed, setFeed] = useState([]);
 
-  // Initialize provider and contract
+  // Initialize provider and read-only contract
   useEffect(() => {
     const initContract = async () => {
       try {
@@ -39,11 +41,11 @@ export default function App() {
         setProvider(rpcProvider);
 
         // Create contract instance for read-only operations
-        const readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, rpcProvider);
-        setContract(readOnlyContract);
+        const readOnlyContractInstance = new ethers.Contract(CONTRACT_ADDRESS, contractABI, rpcProvider);
+        setReadOnlyContract(readOnlyContractInstance);
 
         // Load initial data
-        await loadContractData(readOnlyContract);
+        await loadContractData(readOnlyContractInstance);
       } catch (error) {
         console.error("Error initializing contract:", error);
       }
@@ -88,18 +90,18 @@ export default function App() {
 
     // Cleanup event listeners on unmount
     return () => {
-      if (contract) {
-        contract.removeAllListeners();
+      if (readOnlyContract) {
+        readOnlyContract.removeAllListeners();
       }
     };
   }, []);
 
   // Function to update user's tickets when connected
   useEffect(() => {
-    if (contract && userAddress) {
+    if (readOnlyContract && userAddress) {
       const updateUserTickets = async () => {
         try {
-          const userTickets = await contract.getUserTickets(userAddress);
+          const userTickets = await readOnlyContract.getUserTickets(userAddress);
           setMyTickets(userTickets.length);
         } catch (error) {
           console.error("Error getting user tickets:", error);
@@ -108,17 +110,16 @@ export default function App() {
       
       updateUserTickets();
     }
-  }, [contract, userAddress]);
+  }, [readOnlyContract, userAddress]);
 
   const handleParticipate = async () => {
-    if (!provider || !userAddress) {
+    if (!signer || !userAddress) {
       alert("Please connect your wallet first");
       return;
     }
 
     try {
-      // Get the signer (user's wallet) to interact with the contract
-      const signer = await provider.getSigner();
+      // Create a contract instance with signer for write operations
       const writeContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
 
       // Get ticket price from contract
@@ -132,11 +133,11 @@ export default function App() {
       setFeed(prev => [`You bought a ticket`, ...prev].slice(0, 15));
       
       // Update user tickets count
-      const userTickets = await contract.getUserTickets(userAddress);
+      const userTickets = await readOnlyContract.getUserTickets(userAddress);
       setMyTickets(userTickets.length);
       
       // Update pool amount
-      const balance = await contract.getContractBalance();
+      const balance = await readOnlyContract.getContractBalance();
       setPoolAmount(parseFloat(ethers.formatEther(balance)));
     } catch (error) {
       console.error("Error purchasing ticket:", error);
@@ -158,7 +159,18 @@ export default function App() {
 
           <div className={styles.headerRight}>
             <LanguageSelector />
-            <WalletConnect onConnect={setUserAddress} onDisconnect={() => setUserAddress(null)} />
+            <WalletConnect 
+    onConnect={(address, provider, signer) => {
+      setUserAddress(address);
+      setProvider(provider);
+      setSigner(signer);
+    }} 
+    onDisconnect={() => {
+      setUserAddress(null);
+      setProvider(null);
+      setSigner(null);
+    }} 
+  />
           </div>
         </div>
       </header>
