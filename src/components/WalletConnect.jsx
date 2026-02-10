@@ -8,18 +8,31 @@ export default function WalletConnect() {
   const [address, setAddress] = useState(null);
 
   const connect = async () => {
-    if (typeof window === "undefined") return;
-    const eth = window.ethereum;
-    if (!eth) {
-      alert("Please install MetaMask");
+    if (typeof window === "undefined") {
+      console.error("Window object is not available");
       return;
     }
+    
+    if (!window.ethereum) {
+      alert(t("noMetaMask", "Please install MetaMask"));
+      return;
+    }
+    
     try {
-      const accounts = await eth.request({ method: "eth_requestAccounts" });
-      setAddress(accounts[0]);
-      setConnected(true);
-    } catch (e) {
-      console.error(e);
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts"
+      });
+      
+      if (accounts && accounts.length > 0) {
+        setAddress(accounts[0]);
+        setConnected(true);
+      }
+    } catch (error) {
+      console.error("Error connecting to wallet:", error);
+      if (error.code === 4001) {
+        // User rejected the request
+        console.log("User rejected the connection request");
+      }
     }
   };
 
@@ -37,3 +50,5 @@ export default function WalletConnect() {
     </button>
   );
 }
+
+
