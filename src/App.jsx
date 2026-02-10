@@ -10,37 +10,96 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets } from "./utils/ethersUtils";
+import { ethers } from 'ethers';
 
 export default function App() {
   const { t } = useTranslation();
 
-  const [poolAmount, setPoolAmount] = useState(300.0);
+  const [poolAmount, setPoolAmount] = useState(0); // Initialize as 0, will be updated from contract
   const poolTarget = 1000000;
-  const [ticketsBought, setTicketsBought] = useState(12);
-  const [myTickets, setMyTickets] = useState(2);
+  const [ticketsBought, setTicketsBought] = useState(0); // Initialize as 0, will be updated from contract
+  const [myTickets, setMyTickets] = useState(0); // Initialize as 0, will be updated from contract
   const [feed, setFeed] = useState([]);
+  const [walletAddress, setWalletAddress] = useState(null);
+  const [signer, setSigner] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // simulate Live Feed updates (demo). Keep last 15 events
+  // Initialize data from smart contract
   useEffect(() => {
-    const interval = setInterval(() => {
-      const sample = [
-        `0xA8b… ${t("events.deposited", "внес 30POL в пул")}`,
-        `0xF7c… ${t("events.deposited", "внес 30POL в пул")}`,
-        `0xD4e… ${t("events.bought", "купил 3 билета")}`,
-        `0xB2a… ${t("events.depositedLarge", "внес 90POL в пул")}`
-      ];
-      setFeed(prev => [sample[Math.floor(Math.random()*sample.length)], ...prev].slice(0,15));
-      setPoolAmount(p => Math.min(poolTarget, +(p + Math.random()*50).toFixed(2)));
-      setTicketsBought(t => t + Math.floor(Math.random()*3));
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [t]);
+    const initializeData = async () => {
+      try {
+        // Get initial pool amount from contract
+        const initialPool = await readPrizePool();
+        setPoolAmount(initialPool);
+        
+        // Set up event listener for ticket purchases
+        const unsubscribe = watchTicketEvents((eventMessage) => {
+          setFeed(prev => [eventMessage, ...prev].slice(0,15));
+        });
+        
+        // Cleanup subscription
+        return () => unsubscribe();
+      } catch (error) {
+        console.error("Error initializing data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleParticipate = () => {
-    setMyTickets(t => t + 1);
-    setTicketsBought(t => t + 1);
-    setPoolAmount(p => +(p + 30).toFixed(2));
-    setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
+    initializeData();
+  }, []);
+
+  // Update user's tickets when wallet connects
+  useEffect(() => {
+    const fetchUserTickets = async () => {
+      if (walletAddress) {
+        try {
+          const userTickets = await getUserTickets(walletAddress);
+          setMyTickets(userTickets);
+        } catch (error) {
+          console.error("Error fetching user tickets:", error);
+        }
+      }
+    };
+
+    fetchUserTickets();
+  }, [walletAddress]);
+
+  const handleParticipate = async () => {
+    if (!signer) {
+      alert("Please connect your wallet first");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Buy ticket via smart contract
+      const result = await buyTicket(signer);
+      
+      if (result.success) {
+        // Update local state after successful transaction
+        setMyTickets(t => t + 1);
+        setTicketsBought(t => t + 1);
+        setPoolAmount(p => +(p + 30).toFixed(2));
+        setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
+      } else {
+        console.error("Transaction failed:", result.error);
+        alert(`Transaction failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error buying ticket:", error);
+      alert(`Error buying ticket: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Callback function to pass to WalletConnect component
+  const onWalletConnect = async (address, provider, signer) => {
+    setWalletAddress(address);
+    setSigner(signer);
   };
 
   return (
@@ -57,7 +116,7 @@ export default function App() {
 
           <div className={styles.headerRight}>
             <LanguageSelector />
-            <WalletConnect />
+            <WalletConnect onConnect={onWalletConnect} />
           </div>
         </div>
       </header>
@@ -84,8 +143,12 @@ export default function App() {
             </div>
 
             <div className={styles.actionRow}>
-              <button onClick={handleParticipate} className={styles.participateButton}>
-                🎫 {t("participate", "Участвовать — 30 POL")}
+              <button 
+                onClick={handleParticipate} 
+                className={`${styles.participateButton} ${loading ? styles.disabled : ''}`}
+                disabled={loading}
+              >
+                🎫 {loading ? t("processing", "Обработка...") : t("participate", "Участвовать — 30 POL")}
               </button>
 
               <LuckyButton />
