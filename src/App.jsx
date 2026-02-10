@@ -23,6 +23,7 @@ export default function App() {
   const [provider, setProvider] = useState(null);
   const [contract, setContract] = useState(null);
   const [userAddress, setUserAddress] = useState(null);
+  const [signer, setSigner] = useState(null);
   
   const [poolAmount, setPoolAmount] = useState(0);
   const poolTarget = 1000000;
@@ -94,6 +95,28 @@ export default function App() {
     };
   }, []);
 
+  // Update signer when user connects/disconnects
+  useEffect(() => {
+    const updateSigner = async () => {
+      if (window.ethereum && userAddress) {
+        try {
+          // Request account access to initialize the provider with signing capabilities
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          
+          const browserProvider = new ethers.BrowserProvider(window.ethereum);
+          const signerInstance = await browserProvider.getSigner();
+          setSigner(signerInstance);
+        } catch (error) {
+          console.error('Error setting up signer:', error);
+        }
+      } else {
+        setSigner(null);
+      }
+    };
+
+    updateSigner();
+  }, [userAddress]);
+
   // Function to update user's tickets when connected
   useEffect(() => {
     if (contract && userAddress) {
@@ -111,14 +134,13 @@ export default function App() {
   }, [contract, userAddress]);
 
   const handleParticipate = async () => {
-    if (!provider || !userAddress) {
+    if (!provider || !userAddress || !signer) {
       alert("Please connect your wallet first");
       return;
     }
 
     try {
-      // Get the signer (user's wallet) to interact with the contract
-      const signer = await provider.getSigner();
+      // Create a writable contract instance using the signer
       const writeContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
 
       // Get ticket price from contract
