@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
+import { ethers } from "ethers";
 
 export default function WalletConnect({ onConnect, onDisconnect }) {
   const { t } = useTranslation();
@@ -20,12 +21,18 @@ export default function WalletConnect({ onConnect, onDisconnect }) {
     }
     
     try {
+      // Request account access
       const accounts = await eth.request({ method: "eth_requestAccounts" });
       if (accounts && accounts.length > 0) {
         const userAddress = accounts[0];
         setAddress(userAddress);
         setConnected(true);
-        if (onConnect) onConnect(userAddress);
+        
+        // Create provider and signer for ethers
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        
+        if (onConnect) onConnect(userAddress, provider, signer);
       }
     } catch (e) {
       console.error("Error connecting wallet:", e);
@@ -51,7 +58,12 @@ export default function WalletConnect({ onConnect, onDisconnect }) {
             const userAddress = accounts[0];
             setAddress(userAddress);
             setConnected(true);
-            if (onConnect) onConnect(userAddress);
+            
+            // Create provider and signer for ethers
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            
+            if (onConnect) onConnect(userAddress, provider, signer);
           }
         } catch (e) {
           console.error("Error checking existing connection:", e);
