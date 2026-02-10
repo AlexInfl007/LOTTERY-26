@@ -44,69 +44,80 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-bg-dark via-panel to-[#1a0533] text-white flex flex-col">
-      <header className="w-full py-6 px-6 md:px-12 flex items-center justify-between">
-        <div className="flex items-center gap-4 ml-6 md:ml-16"> {/* moved from extremes */}
-          <div className="w-28 h-12 bg-white text-black rounded-lg flex items-center justify-center font-bold shadow-lg">LOGO</div>
-          <div>
-            <div className="text-2xl md:text-3xl font-extrabold">Seren Lottery Chain</div>
-            <div className="text-sm md:text-base text-gray-300">{t("subtitle", "Verifiable Randomness — Fair Wins")}</div>
+    <div className={styles.pageWrap}>
+      <header className={styles.header}>
+        <div className={styles.containerHeader}>
+          <div className={styles.headerLeft}>
+            <div className={styles.logoBox}>S</div>
+            <div className={styles.titleBlock}>
+              <div className={styles.projectTitle}>Seren Lottery Chain</div>
+              <div className={styles.subtitle}>{t("subtitle", "Verifiable Randomness — Fair Wins")}</div>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-4 mr-6 md:mr-16"> {/* moved from extremes */}
-          <LanguageSelector />
-          <WalletConnect />
+          <div className={styles.headerRight}>
+            <LanguageSelector />
+            <WalletConnect />
+          </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-6 md:px-12 py-6 flex-1">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <section className="bg-white/5 border border-white/6 p-6 md:p-8 rounded-2xl shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h2 className="text-lg md:text-2xl font-bold">{t("currentJackpot", "Текущий джекпот")}</h2>
-                  <div className="text-sm text-gray-300">Round: 1</div>
+      <main className={styles.main}>
+        <div className={styles.leftColumn}>
+          <section className={styles.jackpotSection}>
+            <div className={styles.jackpotHeaderRow}>
+              <div>
+                <div className={styles.jackpotTitle}>
+                  <span className={styles.jackpotIcon}>💰</span>
+                  {t("currentJackpot", "Текущий джекпот")}
                 </div>
-                <div className="text-sm text-gray-300">{t("ticketsBought", "билетов куплено")}: {ticketsBought}</div>
+                <div className={styles.roundLabel}>Round: 1</div>
               </div>
-
-              <PoolProgressBar current={poolAmount} goal={poolTarget} />
-
-              <div className="mt-4 text-center">
-                <div className="font-semibold text-lg md:text-xl">{t("collectingTo", "Собираем пул до")} {poolTarget.toLocaleString()} POL!</div>
-                <div className="text-sm md:text-base text-gray-300 mt-1">{t("eachTicketIncreases", "Каждый билет увеличивает джекпот.")}</div>
-              </div>
-
-              <div className="flex gap-4 justify-center mt-6 flex-wrap">
-                <button onClick={handleParticipate} className="bg-gradient-to-r from-[#A855F7] to-[#F472B6] px-6 py-3 rounded-xl font-bold shadow-lg text-sm md:text-base transform hover:scale-105 transition">
-                  {t("participate", "Участвовать — 30 POL")}
-                </button>
-
-                <LuckyButton />
-              </div>
-
-              <div className="text-center text-gray-300 mt-4 text-base">{t("myTickets", "Мои билеты")}: {myTickets}</div>
-            </section>
-
-            <HowItWorks />
-          </div>
-
-          <aside className="space-y-6">
-            <Winners winners={[]} />
-
-            <div className="bg-white/5 border border-white/6 p-4 rounded-2xl shadow-xl">
-              <h4 className="font-bold mb-2 text-lg">{t("liveFeed", "Live feed:")}</h4>
-              <LiveFeed events={feed} />
+              <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought}</div>
             </div>
-          </aside>
+
+            <PoolProgressBar current={poolAmount} goal={poolTarget} />
+
+            <div className={styles.description}>
+              <div className={styles.boldLine}>{t("collectingTo", "Собираем пул до")} {poolTarget.toLocaleString()} POL!</div>
+              <div className={styles.mutedLine}>{t("eachTicketIncreases", "Каждый билет увеличивает джекпот.")}</div>
+            </div>
+
+            <div className={styles.actionRow}>
+              <button onClick={handleParticipate} className={styles.participateButton}>
+                🎫 {t("participate", "Участвовать — 30 POL")}
+              </button>
+
+              <LuckyButton />
+            </div>
+
+            <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {myTickets}</div>
+          </section>
+
+          <HowItWorks />
+        </div>
+
+        <div className={styles.rightColumn}>
+          <Winners winners={[]} />
+
+          <div className={styles.sideCard}>
+            <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
+            <LiveFeed events={feed} />
+          </div>
         </div>
       </main>
 
-      <footer className="py-6 px-6 md:px-12 text-center text-gray-400">
-        <div>{t("footerNote", "Provable randomness powered by Chainlink VRF")} • Powered by Polygon</div>
-        <div className="mt-2">© 2025 Seren</div>
+      <footer className={styles.footer}>
+        <div className={styles.footerTop}>
+          <div className={styles.footerLeft}>
+            <div className={styles.smallLogo}></div>
+            <span>{t("footerNote", "Provable randomness powered by Chainlink VRF")}</span>
+          </div>
+          <div className={styles.footerRight}>
+            <span>Powered by Polygon</span>
+          </div>
+        </div>
+        <div className={styles.footerBottom}>© 2025 Seren</div>
       </footer>
     </div>
   );
