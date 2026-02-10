@@ -61,12 +61,21 @@ export default function LuckyButton() {
       </button>
 
       {modalOpen && (
-        <div className={styles.modalOverlay} onClick={() => setModalOpen(false)}>
-          <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 800, marginBottom: 8 }}>{t("luckyTipTitle", "Совет удачи")}</div>
-            <div style={{ color: "var(--txt-muted)" }}>{tip || t("luckyFallback", "Удача улыбается смелым!")}</div>
-            <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
-              <button className={styles.modalCloseBtn} onClick={() => setModalOpen(false)}>
+        <div 
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+          onClick={() => setModalOpen(false)}
+        >
+          <div 
+            className="bg-gray-800 p-6 rounded-xl max-w-md w-full mx-4 border border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 800, fontSize: '1.2em', marginBottom: 8, color: 'white' }}>{t("luckyTipTitle", "Совет удачи")}</div>
+            <div style={{ color: "#ccc", marginBottom: 16 }}>{tip || t("luckyFallback", "Удача улыбается смелым!")}</div>
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <button 
+                className="bg-gradient-to-r from-[#A855F7] to-[#F472B6] px-6 py-2 rounded-lg font-medium"
+                onClick={() => setModalOpen(false)}
+              >
                 OK
               </button>
             </div>
