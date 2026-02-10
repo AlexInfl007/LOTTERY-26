@@ -5,66 +5,29 @@ node_modules/
 # Build artifacts
 dist/
 build/
-target/
+*.js.map
+*.mjs.map
+*.cjs.map
+*.cts.map
+*.d.ts.map
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.py.class
-venv/
-.venv/
+# Vite specific
+.vite/
+
+# Environment
 .env
 .env.local
-.env.*
+*.env.*
 
 # Logs
 *.log
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*.tmp
 
 # OS
 .DS_Store
 Thumbs.db
 
-# MyPy
-.mypy_cache/
-
-# PyTest
-.pytest_cache/
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
 ```
