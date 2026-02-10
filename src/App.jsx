@@ -10,37 +10,47 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
+import { readPrizePool, watchTicketEvents } from "./utils/ethersUtils";
 
 export default function App() {
   const { t } = useTranslation();
 
-  const [poolAmount, setPoolAmount] = useState(300.0);
+  const [poolAmount, setPoolAmount] = useState(0); // Start with 0 and fetch real data
   const poolTarget = 1000000;
-  const [ticketsBought, setTicketsBought] = useState(12);
-  const [myTickets, setMyTickets] = useState(2);
+  const [ticketsBought, setTicketsBought] = useState(0); // Start with 0 and fetch real data
+  const [myTickets, setMyTickets] = useState(0);
   const [feed, setFeed] = useState([]);
 
-  // simulate Live Feed updates (demo). Keep last 15 events
+  // Fetch real data from smart contract on component mount
   useEffect(() => {
-    const interval = setInterval(() => {
-      const sample = [
-        `0xA8b… ${t("events.deposited", "внес 30POL в пул")}`,
-        `0xF7c… ${t("events.deposited", "внес 30POL в пул")}`,
-        `0xD4e… ${t("events.bought", "купил 3 билета")}`,
-        `0xB2a… ${t("events.depositedLarge", "внес 90POL в пул")}`
-      ];
-      setFeed(prev => [sample[Math.floor(Math.random()*sample.length)], ...prev].slice(0,15));
-      setPoolAmount(p => Math.min(poolTarget, +(p + Math.random()*50).toFixed(2)));
-      setTicketsBought(t => t + Math.floor(Math.random()*3));
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [t]);
+    const fetchData = async () => {
+      try {
+        const prizePool = await readPrizePool();
+        setPoolAmount(prizePool);
+      } catch (error) {
+        console.error('Error fetching prize pool:', error);
+      }
+    };
+
+    fetchData();
+
+    // Set up event listener for ticket purchases
+    const unsubscribe = watchTicketEvents((eventMessage) => {
+      setFeed(prev => [eventMessage, ...prev].slice(0, 15));
+      setTicketsBought(prev => prev + 1);
+    });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
 
   const handleParticipate = () => {
-    setMyTickets(t => t + 1);
-    setTicketsBought(t => t + 1);
-    setPoolAmount(p => +(p + 30).toFixed(2));
-    setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
+    // This would connect to wallet and execute real transaction
+    // For now we'll keep this as a placeholder until wallet integration is added
+    alert('Real wallet integration would happen here');
   };
 
   return (
