@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import PoolProgressBar from "./components/PoolProgressBar";
@@ -9,6 +9,7 @@ import HowItWorks from "./components/HowItWorks";
 import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
+import contractService from './utils/contractService';
 import styles from "./styles/Home.module.css";
 
 export default function App() {
@@ -20,8 +21,9 @@ export default function App() {
   const [myTickets, setMyTickets] = useState(2);
   const [feed, setFeed] = useState([]);
 
-  // simulate Live Feed updates (demo). Keep last 15 events
+  // Подписка на события смарт-контракта для обновления ленты
   useEffect(() => {
+    // Временно оставляем демо-ленту, пока не настроим прослушивание событий
     const interval = setInterval(() => {
       const sample = [
         `0xA8b… ${t("events.deposited", "внес 30POL в пул")}`,
@@ -30,17 +32,34 @@ export default function App() {
         `0xB2a… ${t("events.depositedLarge", "внес 90POL в пул")}`
       ];
       setFeed(prev => [sample[Math.floor(Math.random()*sample.length)], ...prev].slice(0,15));
-      setPoolAmount(p => Math.min(poolTarget, +(p + Math.random()*50).toFixed(2)));
-      setTicketsBought(t => t + Math.floor(Math.random()*3));
-    }, 3000);
+    }, 5000); // Обновляем каждые 5 секунд
     return () => clearInterval(interval);
   }, [t]);
 
-  const handleParticipate = () => {
-    setMyTickets(t => t + 1);
-    setTicketsBought(t => t + 1);
-    setPoolAmount(p => +(p + 30).toFixed(2));
-    setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
+  const handleParticipate = async () => {
+    if (!walletConnected || !userAddress) {
+      alert(t("connectWalletFirst", "Пожалуйста, подключите кошелек сначала"));
+      return;
+    }
+    
+    try {
+      // Получаем провайдера и signer
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // Вызываем функцию покупки билета в смарт-контракте
+      await contractService.buyTicket(userAddress, signer);
+      
+      // После успешной покупки обновляем данные
+      fetchContractData();
+      updateUserTickets(userAddress);
+      
+      // Добавляем событие в фид
+      setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
+    } catch (error) {
+      console.error('Error buying ticket:', error);
+      alert(t("transactionFailed", "Ошибка транзакции: ") + error.message);
+    }
   };
 
   return (
@@ -57,7 +76,7 @@ export default function App() {
 
           <div className={styles.headerRight}>
             <LanguageSelector />
-            <WalletConnect />
+            <WalletConnect onConnect={handleWalletConnect} />
           </div>
         </div>
       </header>
@@ -71,7 +90,7 @@ export default function App() {
                   <span className={styles.jackpotIcon}>💰</span>
                   {t("currentJackpot", "Текущий джекпот")}
                 </div>
-                <div className={styles.roundLabel}>Round: 1</div>
+                <div className={styles.roundLabel}>Round: {roundId}</div>
               </div>
               <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought}</div>
             </div>
@@ -84,7 +103,11 @@ export default function App() {
             </div>
 
             <div className={styles.actionRow}>
-              <button onClick={handleParticipate} className={styles.participateButton}>
+              <button 
+                onClick={handleParticipate} 
+                className={styles.participateButton}
+                disabled={!walletConnected}
+              >
                 🎫 {t("participate", "Участвовать — 30 POL")}
               </button>
 

@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 
-export default function WalletConnect() {
+export default function WalletConnect({ onConnect }) {
   const { t } = useTranslation();
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState(null);
@@ -16,12 +16,23 @@ export default function WalletConnect() {
     }
     try {
       const accounts = await eth.request({ method: "eth_requestAccounts" });
-      setAddress(accounts[0]);
+      const userAddress = accounts[0];
+      setAddress(userAddress);
       setConnected(true);
+      if (onConnect) {
+        onConnect(true, userAddress);
+      }
     } catch (e) {
       console.error(e);
     }
   };
+
+  // Вызываем onConnect при изменении состояния подключения
+  useEffect(() => {
+    if (onConnect) {
+      onConnect(connected, address);
+    }
+  }, [connected, address, onConnect]);
 
   return (
     <button
