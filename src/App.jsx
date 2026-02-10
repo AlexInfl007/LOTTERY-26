@@ -117,6 +117,17 @@ export default function App() {
             <span>Powered by Polygon</span>
           </div>
         </div>
+        <div className={styles.contractInfo}>
+          <span>Contract: </span>
+          <a 
+            href="https://polygonscan.com/address/0xf90169ad413429af4ae0a3b8962648d4a3289011" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ color: 'var(--accent)', textDecoration: 'none' }}
+          >
+            0xf90169AD413429af4AE0a3B8962648d4a3289011
+          </a>
+        </div>
         <div className={styles.footerBottom}>© 2025 Seren</div>
       </footer>
     </div>

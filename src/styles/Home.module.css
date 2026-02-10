@@ -651,6 +651,26 @@
   border-radius: 6px;
 }
 
+/* contract info */
+.contractInfo {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.contractInfo a {
+  color: var(--accent);
+  text-decoration: none;
+  margin-left: 0.25rem;
+  transition: opacity 0.2s ease;
+}
+
+.contractInfo a:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
 /* footer bottom */
 .footerBottom {
   text-align: center;
