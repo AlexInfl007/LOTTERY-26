@@ -10,6 +10,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
+import { CONTRACT_CONFIG } from "./config";
 
 export default function App() {
   const { t } = useTranslation();
@@ -106,6 +107,17 @@ export default function App() {
 
       <footer className="py-6 px-6 md:px-12 text-center text-gray-400">
         <div>{t("footerNote", "Provable randomness powered by Chainlink VRF")} • Powered by Polygon</div>
+        <div className="mt-2">
+          <span className="text-gray-400">{t("contractAddress", "Contract Address: ")}</span>
+          <a 
+            href={`${CONTRACT_CONFIG.explorerUrl}${CONTRACT_CONFIG.address}`} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-purple-400 hover:text-purple-300 underline break-all"
+          >
+            {CONTRACT_CONFIG.address}
+          </a>
+        </div>
         <div className="mt-2">© 2025 Seren</div>
       </footer>
     </div>
