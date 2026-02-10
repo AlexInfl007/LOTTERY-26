@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
+import { ethers } from "ethers";
 
 export default function WalletConnect({ onConnect, onDisconnect }) {
   const { t } = useTranslation();
@@ -10,6 +11,7 @@ export default function WalletConnect({ onConnect, onDisconnect }) {
   const connect = async () => {
     if (typeof window === "undefined") {
       console.error("Window object is not available");
+      alert("Please open this page in a browser that supports Web3 wallets");
       return;
     }
     
@@ -20,24 +22,48 @@ export default function WalletConnect({ onConnect, onDisconnect }) {
     }
     
     try {
-      const accounts = await eth.request({ method: "eth_requestAccounts" });
+      // Request account access
+      const accounts = await eth.request({ 
+        method: "eth_requestAccounts" 
+      });
+      
       if (accounts && accounts.length > 0) {
         const userAddress = accounts[0];
         setAddress(userAddress);
         setConnected(true);
         if (onConnect) onConnect(userAddress);
+        
+        // Set up account change listener
+        eth.on('accountsChanged', handleAccountsChanged);
       }
     } catch (e) {
       console.error("Error connecting wallet:", e);
       if (e.code === 4001) {
-        console.log("User rejected the connection request");
+        alert("User rejected the connection request");
+      } else {
+        alert(`Error connecting wallet: ${e.message}`);
       }
+    }
+  };
+
+  const handleAccountsChanged = (accounts) => {
+    if (accounts.length === 0) {
+      // User disconnected their wallet
+      disconnect();
+    } else {
+      // Account changed
+      const newAddress = accounts[0];
+      setAddress(newAddress);
+      if (onConnect) onConnect(newAddress);
     }
   };
 
   const disconnect = () => {
     setAddress(null);
     setConnected(false);
+    if (window.ethereum) {
+      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+    }
     if (onDisconnect) onDisconnect();
   };
 
@@ -52,6 +78,9 @@ export default function WalletConnect({ onConnect, onDisconnect }) {
             setAddress(userAddress);
             setConnected(true);
             if (onConnect) onConnect(userAddress);
+            
+            // Set up account change listener
+            window.ethereum.on('accountsChanged', handleAccountsChanged);
           }
         } catch (e) {
           console.error("Error checking existing connection:", e);
@@ -60,6 +89,13 @@ export default function WalletConnect({ onConnect, onDisconnect }) {
     };
 
     checkExistingConnection();
+
+    // Clean up event listener on unmount
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      }
+    };
   }, [onConnect]);
 
   return (
