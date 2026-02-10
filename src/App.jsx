@@ -45,8 +45,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-bg-dark via-panel to-[#1a0533] text-white flex flex-col">
-      <header className="w-full py-6 px-6 md:px-12 flex items-center justify-between">
-        <div className="flex items-center gap-4 ml-6 md:ml-16"> {/* moved from extremes */}
+      <header className="w-full py-6 px-6 md:px-12 flex items-center justify-between bg-transparent">
+        <div className="flex items-center gap-4">
           <div className="w-28 h-12 bg-white text-black rounded-lg flex items-center justify-center font-bold shadow-lg">LOGO</div>
           <div>
             <div className="text-2xl md:text-3xl font-extrabold">Seren Lottery Chain</div>
@@ -54,7 +54,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 mr-6 md:mr-16"> {/* moved from extremes */}
+        <div className="flex items-center gap-4">
           <LanguageSelector />
           <WalletConnect />
         </div>
@@ -104,7 +104,7 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="py-6 px-6 md:px-12 text-center text-gray-400">
+      <footer className="py-6 px-6 md:px-12 text-center text-gray-400 bg-transparent">
         <div>{t("footerNote", "Provable randomness powered by Chainlink VRF")} • Powered by Polygon</div>
         <div className="mt-2">© 2025 Seren</div>
       </footer>
