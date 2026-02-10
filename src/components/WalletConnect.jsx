@@ -8,30 +8,35 @@ export default function WalletConnect() {
   const [address, setAddress] = useState(null);
 
   const connect = async () => {
-    if (typeof window === "undefined") return;
-    const eth = window.ethereum;
-    if (!eth) {
-      alert("Please install MetaMask");
+    if (typeof window === "undefined") {
+      console.error("Window object is not available");
       return;
     }
+    
+    const eth = window.ethereum;
+    if (!eth) {
+      alert("Please install MetaMask or another Web3 wallet");
+      return;
+    }
+    
     try {
       const accounts = await eth.request({ method: "eth_requestAccounts" });
-      setAddress(accounts[0]);
-      setConnected(true);
+      if (accounts && accounts.length > 0) {
+        setAddress(accounts[0]);
+        setConnected(true);
+      }
     } catch (e) {
-      console.error(e);
+      console.error("Error connecting wallet:", e);
+      if (e.code === 4001) {
+        console.log("User rejected the connection request");
+      }
     }
   };
 
   return (
     <button
       onClick={connect}
-      className="px-4 py-2 rounded-xl font-semibold transform hover:scale-105 transition"
-      style={{
-        background: "linear-gradient(90deg,#A855F7,#F472B6)",
-        color: "white",
-        boxShadow: "0 10px 30px rgba(168,85,247,0.15)"
-      }}
+      className={`${styles.connectButton}`}
     >
       {connected ? (address ? `${address.slice(0,6)}…${address.slice(-4)}` : t("connected","Connected")) : t("connectWallet","Connect Wallet")}
     </button>
