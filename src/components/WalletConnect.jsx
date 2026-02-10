@@ -6,10 +6,16 @@ export default function WalletConnect({ onConnect, onDisconnect }) {
   const { t } = useTranslation();
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState(null);
+  const [isClient, setIsClient] = useState(false);
+
+  // Ensure we're running in the browser
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const connect = async () => {
-    if (typeof window === "undefined") {
-      console.error("Window object is not available");
+    if (typeof window === "undefined" || !isClient) {
+      console.error("Web3 wallet connection only works in browser environment");
       return;
     }
     
@@ -31,6 +37,8 @@ export default function WalletConnect({ onConnect, onDisconnect }) {
       console.error("Error connecting wallet:", e);
       if (e.code === 4001) {
         console.log("User rejected the connection request");
+      } else {
+        alert(`Failed to connect wallet: ${e.message}`);
       }
     }
   };
