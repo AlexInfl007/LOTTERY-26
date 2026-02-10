@@ -1,0 +1,33 @@
+```
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+*.js.map
+*.mjs.map
+*.cjs.map
+*.cts.map
+*.d.ts.map
+
+# Vite specific
+.vite/
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+```
