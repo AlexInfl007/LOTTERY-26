@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 
-export default function WalletConnect() {
+export default function WalletConnect({ onConnect, onDisconnect }) {
   const { t } = useTranslation();
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState(null);
@@ -22,8 +22,10 @@ export default function WalletConnect() {
     try {
       const accounts = await eth.request({ method: "eth_requestAccounts" });
       if (accounts && accounts.length > 0) {
-        setAddress(accounts[0]);
+        const userAddress = accounts[0];
+        setAddress(userAddress);
         setConnected(true);
+        if (onConnect) onConnect(userAddress);
       }
     } catch (e) {
       console.error("Error connecting wallet:", e);
@@ -33,9 +35,36 @@ export default function WalletConnect() {
     }
   };
 
+  const disconnect = () => {
+    setAddress(null);
+    setConnected(false);
+    if (onDisconnect) onDisconnect();
+  };
+
+  // Check if already connected on component mount
+  useEffect(() => {
+    const checkExistingConnection = async () => {
+      if (typeof window !== "undefined" && window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: "eth_accounts" });
+          if (accounts && accounts.length > 0) {
+            const userAddress = accounts[0];
+            setAddress(userAddress);
+            setConnected(true);
+            if (onConnect) onConnect(userAddress);
+          }
+        } catch (e) {
+          console.error("Error checking existing connection:", e);
+        }
+      }
+    };
+
+    checkExistingConnection();
+  }, [onConnect]);
+
   return (
     <button
-      onClick={connect}
+      onClick={connected ? disconnect : connect}
       className={`${styles.connectButton}`}
     >
       {connected ? (address ? `${address.slice(0,6)}…${address.slice(-4)}` : t("connected","Connected")) : t("connectWallet","Connect Wallet")}
