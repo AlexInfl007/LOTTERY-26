@@ -107,6 +107,16 @@ export default function App() {
       <footer className="py-6 px-6 md:px-12 text-center text-gray-400">
         <div>{t("footerNote", "Provable randomness powered by Chainlink VRF")} • Powered by Polygon</div>
         <div className="mt-2">© 2025 Seren</div>
+        <div className="mt-2">
+          <a 
+            href="https://polygonscan.com/address/0xf90169ad413429af4ae0a3b8962648d4a3289011" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-300 underline"
+          >
+            0xf90169AD413429af4AE0a3B8962648d4a3289011
+          </a>
+        </div>
       </footer>
     </div>
   );
