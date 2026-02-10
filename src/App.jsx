@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { ethers } from "ethers";
 
 import PoolProgressBar from "./components/PoolProgressBar";
 import WalletConnect from "./components/WalletConnect";
@@ -9,38 +10,138 @@ import HowItWorks from "./components/HowItWorks";
 import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
+import contractABI from "./contractABI.json";
+
 import styles from "./styles/Home.module.css";
+
+const CONTRACT_ADDRESS = "0xf90169ad413429af4ae0a3b8962648d4a3289011";
+const POLYGON_RPC_URL = "https://polygon-rpc.com/";
 
 export default function App() {
   const { t } = useTranslation();
 
-  const [poolAmount, setPoolAmount] = useState(300.0);
+  const [provider, setProvider] = useState(null);
+  const [contract, setContract] = useState(null);
+  const [userAddress, setUserAddress] = useState(null);
+  
+  const [poolAmount, setPoolAmount] = useState(0);
   const poolTarget = 1000000;
-  const [ticketsBought, setTicketsBought] = useState(12);
-  const [myTickets, setMyTickets] = useState(2);
+  const [ticketsBought, setTicketsBought] = useState(0);
+  const [myTickets, setMyTickets] = useState(0);
   const [feed, setFeed] = useState([]);
 
-  // simulate Live Feed updates (demo). Keep last 15 events
+  // Initialize provider and contract
   useEffect(() => {
-    const interval = setInterval(() => {
-      const sample = [
-        `0xA8b… ${t("events.deposited", "внес 30POL в пул")}`,
-        `0xF7c… ${t("events.deposited", "внес 30POL в пул")}`,
-        `0xD4e… ${t("events.bought", "купил 3 билета")}`,
-        `0xB2a… ${t("events.depositedLarge", "внес 90POL в пул")}`
-      ];
-      setFeed(prev => [sample[Math.floor(Math.random()*sample.length)], ...prev].slice(0,15));
-      setPoolAmount(p => Math.min(poolTarget, +(p + Math.random()*50).toFixed(2)));
-      setTicketsBought(t => t + Math.floor(Math.random()*3));
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [t]);
+    const initContract = async () => {
+      try {
+        // Create a provider for reading data from blockchain
+        const rpcProvider = new ethers.JsonRpcProvider(POLYGON_RPC_URL);
+        setProvider(rpcProvider);
 
-  const handleParticipate = () => {
-    setMyTickets(t => t + 1);
-    setTicketsBought(t => t + 1);
-    setPoolAmount(p => +(p + 30).toFixed(2));
-    setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
+        // Create contract instance for read-only operations
+        const readOnlyContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, rpcProvider);
+        setContract(readOnlyContract);
+
+        // Load initial data
+        await loadContractData(readOnlyContract);
+      } catch (error) {
+        console.error("Error initializing contract:", error);
+      }
+    };
+
+    const loadContractData = async (contractInstance) => {
+      try {
+        // Get contract balance (pool amount)
+        const balance = await contractInstance.getContractBalance();
+        setPoolAmount(parseFloat(ethers.formatEther(balance)));
+
+        // Get total tickets bought (using current ticket ID as proxy)
+        const currentTicketId = await contractInstance.getCurrentTicketId();
+        setTicketsBought(Number(currentTicketId));
+
+        // Listen to events
+        setupEventListeners(contractInstance);
+      } catch (error) {
+        console.error("Error loading contract data:", error);
+      }
+    };
+
+    const setupEventListeners = (contractInstance) => {
+      // Listen for TicketPurchased events
+      contractInstance.on("TicketPurchased", (player, ticketId, timestamp) => {
+        setFeed(prev => [`0x${player.toString().slice(-8)}... bought a ticket`, ...prev].slice(0, 15));
+        setTicketsBought(t => t + 1);
+        
+        // Update pool amount by fetching current balance
+        contractInstance.getContractBalance()
+          .then(balance => setPoolAmount(parseFloat(ethers.formatEther(balance))))
+          .catch(console.error);
+      });
+
+      // Listen for LotteryWon events
+      contractInstance.on("LotteryWon", (winner, amount, ticketId) => {
+        setFeed(prev => [`0x${winner.toString().slice(-8)}... won ${ethers.formatEther(amount)} POL`, ...prev].slice(0, 15));
+      });
+    };
+
+    initContract();
+
+    // Cleanup event listeners on unmount
+    return () => {
+      if (contract) {
+        contract.removeAllListeners();
+      }
+    };
+  }, []);
+
+  // Function to update user's tickets when connected
+  useEffect(() => {
+    if (contract && userAddress) {
+      const updateUserTickets = async () => {
+        try {
+          const userTickets = await contract.getUserTickets(userAddress);
+          setMyTickets(userTickets.length);
+        } catch (error) {
+          console.error("Error getting user tickets:", error);
+        }
+      };
+      
+      updateUserTickets();
+    }
+  }, [contract, userAddress]);
+
+  const handleParticipate = async () => {
+    if (!provider || !userAddress) {
+      alert("Please connect your wallet first");
+      return;
+    }
+
+    try {
+      // Get the signer (user's wallet) to interact with the contract
+      const signer = await provider.getSigner();
+      const writeContract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
+
+      // Get ticket price from contract
+      const ticketPrice = await writeContract.ticketPrice();
+      
+      // Purchase ticket
+      const tx = await writeContract.purchaseTicket({ value: ticketPrice });
+      await tx.wait();
+
+      // Update UI after successful transaction
+      setFeed(prev => [`You bought a ticket`, ...prev].slice(0, 15));
+      
+      // Update user tickets count
+      const userTickets = await contract.getUserTickets(userAddress);
+      setMyTickets(userTickets.length);
+      
+      // Update pool amount
+      const balance = await contract.getContractBalance();
+      setPoolAmount(parseFloat(ethers.formatEther(balance)));
+    } catch (error) {
+      console.error("Error purchasing ticket:", error);
+      alert(`Error purchasing ticket: ${error.message}`);
+    }
   };
 
   return (
@@ -57,7 +158,7 @@ export default function App() {
 
           <div className={styles.headerRight}>
             <LanguageSelector />
-            <WalletConnect />
+            <WalletConnect onConnect={setUserAddress} onDisconnect={() => setUserAddress(null)} />
           </div>
         </div>
       </header>
