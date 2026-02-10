@@ -45,18 +45,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-bg-dark via-panel to-[#1a0533] text-white flex flex-col">
-      <header className="w-full py-6 px-6 md:px-12 flex items-center justify-between">
-        <div className="flex items-center gap-4 ml-6 md:ml-16"> {/* moved from extremes */}
-          <div className="w-28 h-12 bg-white text-black rounded-lg flex items-center justify-center font-bold shadow-lg">LOGO</div>
-          <div>
-            <div className="text-2xl md:text-3xl font-extrabold">Seren Lottery Chain</div>
-            <div className="text-sm md:text-base text-gray-300">{t("subtitle", "Verifiable Randomness — Fair Wins")}</div>
+      <header className="w-full py-6 px-6 md:px-12 flex items-center justify-center">
+        <div className="flex items-center justify-between w-full max-w-6xl">
+          <div className="flex items-center gap-4">
+            <div className="w-28 h-12 bg-white text-black rounded-lg flex items-center justify-center font-bold shadow-lg">LOGO</div>
+            <div>
+              <div className="text-2xl md:text-3xl font-extrabold">Seren Lottery Chain</div>
+              <div className="text-sm md:text-base text-gray-300">{t("subtitle", "Verifiable Randomness — Fair Wins")}</div>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-4 mr-6 md:mr-16"> {/* moved from extremes */}
-          <LanguageSelector />
-          <WalletConnect />
+          <div className="flex items-center gap-4">
+            <LanguageSelector />
+            <WalletConnect />
+          </div>
         </div>
       </header>
 
@@ -107,6 +109,11 @@ export default function App() {
       <footer className="py-6 px-6 md:px-12 text-center text-gray-400">
         <div>{t("footerNote", "Provable randomness powered by Chainlink VRF")} • Powered by Polygon</div>
         <div className="mt-2">© 2025 Seren</div>
+        <div className="mt-2">
+          <a href="https://polygonscan.com/address/YOUR_CONTRACT_ADDRESS_HERE" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+            YOUR_CONTRACT_ADDRESS_HERE
+          </a>
+        </div>
       </footer>
     </div>
   );
