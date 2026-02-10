@@ -1,28 +1,119 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root{
-  --bg-dark: #2E004E;
-  --panel: #3C0068;
+  --bg-dark: #1a0533;
+  --bg-darker: #0f021f;
+  --panel: #2a004a;
+  --panel-light: #3c0068;
   --txt-white: #FFFFFF;
-  --txt-muted: #CFCFCF;
+  --txt-muted: #B8B8D2;
+  --txt-light: #E0E0FF;
   --accent: #A855F7;
-  --button-pink: linear-gradient(90deg,#A855F7,#F472B6);
-  --yellow: #FFD166;
+  --accent-hover: #9a4ae0;
+  --button-pink: linear-gradient(90deg,#A855F7,#EC4899);
+  --button-pink-hover: linear-gradient(90deg,#9a4ae0,#d93787);
+  --border-light: rgba(255,255,255,0.1);
+  --border-medium: rgba(255,255,255,0.2);
+  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -6px rgba(0, 0, 0, 0.04);
+  --transition: all 0.3s ease;
 }
 
-* { box-sizing: border-box; }
-html,body,#root { height:100%; }
+* { 
+  box-sizing: border-box; 
+}
+html,body,#root { 
+  height:100%; 
+  scroll-behavior: smooth;
+}
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-  background: linear-gradient(180deg, var(--bg-dark) 0%, #1a0533 100%);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-darker) 100%);
   color: var(--txt-white);
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
+  overflow-x: hidden;
 }
 
-/* small utilities */
-.container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+/* Small utilities */
+.container { 
+  max-width: 1200px; 
+  margin: 0 auto; 
+  padding: 0 20px; 
+}
+
+/* Card styles */
+.card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  transition: var(--transition);
+}
+
+.card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border-medium);
+  transform: translateY(-2px);
+}
+
+/* Button styles */
+.btn {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--button-pink);
+  color: white;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+}
+
+.btn-primary:hover {
+  background: var(--button-pink-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(168, 85, 247, 0.4);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--txt-white);
+  border: 1px solid var(--border-medium);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Input styles */
+.input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--txt-white);
+  font-size: 16px;
+  transition: var(--transition);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+}
 
 /* Modal styles used by LuckyButton */
 .modalOverlay {
@@ -32,27 +123,41 @@ body {
   top: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.8);
   display:flex;
   align-items:center;
   justify-content:center;
+  backdrop-filter: blur(4px);
 }
 .modalBox {
   background: var(--panel);
-  padding: 18px;
-  border-radius: 12px;
-  max-width: 420px;
+  padding: 24px;
+  border-radius: 20px;
+  max-width: 480px;
   width: 90%;
   color: var(--txt-white);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-  border: 1px solid rgba(255,255,255,0.04);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+  border: 1px solid var(--border-medium);
+  animation: modalAppear 0.3s ease-out;
+}
+@keyframes modalAppear {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
 }
 .modalCloseBtn {
-  background: linear-gradient(90deg,#A855F7,#F472B6);
+  background: var(--button-pink);
   color: white;
-  padding: 8px 14px;
-  border-radius: 10px;
+  padding: 10px 20px;
+  border-radius: 12px;
   border: none;
-  font-weight: 700;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  width: 100%;
+}
+
+.modalCloseBtn:hover {
+  background: var(--button-pink-hover);
+  transform: translateY(-1px);
 }
 
