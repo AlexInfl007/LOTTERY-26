@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
+import { ethers } from 'ethers';
 
-export default function WalletConnect() {
+export default function WalletConnect({ onConnect }) {
   const { t } = useTranslation();
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState(null);
@@ -18,6 +19,10 @@ export default function WalletConnect() {
       const accounts = await eth.request({ method: "eth_requestAccounts" });
       setAddress(accounts[0]);
       setConnected(true);
+      // Pass the address and provider to the parent component
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      onConnect && onConnect(accounts[0], provider, signer);
     } catch (e) {
       console.error(e);
     }
