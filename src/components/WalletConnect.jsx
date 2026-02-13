@@ -32,6 +32,26 @@ export default function WalletConnect({ onConnect }) {
     // Check for various wallet providers
     let ethereum = window.ethereum;
     
+    // Enhanced wallet detection - check for various wallet providers
+    if (typeof window !== 'undefined') {
+      // Check for MetaMask specifically (takes precedence)
+      if (window.ethereum && !window.ethereum.isBraveWallet && !window.ethereum.isTrust && !window.ethereum.isCoinbaseWallet) {
+        ethereum = window.ethereum;
+      } 
+      // Check for Coinbase Wallet
+      else if (window.coinbaseWalletExtension) {
+        ethereum = window.coinbaseWalletExtension;
+      } 
+      // Check for Trust Wallet
+      else if (window.ethereum && window.ethereum.isTrust) {
+        ethereum = window.ethereum;
+      }
+      // Fallback to any available ethereum provider
+      else if (!ethereum && window.ethereum) {
+        ethereum = window.ethereum;
+      }
+    }
+    
     // If no injected wallet found, try to guide user appropriately
     if (!ethereum) {
       setCheckingWallet(false);
@@ -53,6 +73,17 @@ export default function WalletConnect({ onConnect }) {
         alert("Please install a crypto wallet like MetaMask, Trust Wallet, or Coinbase Wallet.");
       }
       return;
+    }
+    
+    // Additional check for multiple wallets
+    if (ethereum.providers && Array.isArray(ethereum.providers)) {
+      // Multiple wallets detected - use the first one that isn't the standard provider
+      for (let i = 0; i < ethereum.providers.length; i++) {
+        if (!ethereum.providers[i].isMetaMask || ethereum.providers[i].isCoinbaseWallet) {
+          ethereum = ethereum.providers[i];
+          break;
+        }
+      }
     }
 
     try {
