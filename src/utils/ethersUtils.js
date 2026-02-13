@@ -46,8 +46,8 @@ export async function buyTicket(signer) {
     const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
     // Buy ticket with 30 POL payment
     const tx = await contractWithSigner.buyTicket({ value: ethers.parseEther("30") });
-    await tx.wait();
-    return { success: true, transaction: tx };
+    const receipt = await tx.wait();
+    return { success: true, transaction: tx, receipt };
   } catch (e) {
     console.error('buyTicket error', e);
     return { success: false, error: e.message };
