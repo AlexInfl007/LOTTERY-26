@@ -17,6 +17,10 @@ export default function WalletConnect({ onConnect }) {
     }
     try {
       const accounts = await eth.request({ method: "eth_requestAccounts" });
+      if (accounts.length === 0) {
+        alert("Wallet connection failed: No active wallet found");
+        return;
+      }
       setAddress(accounts[0]);
       setConnected(true);
       // Pass the address and provider to the parent component
@@ -24,7 +28,17 @@ export default function WalletConnect({ onConnect }) {
       const signer = await provider.getSigner();
       onConnect && onConnect(accounts[0], provider, signer);
     } catch (e) {
-      console.error(e);
+      console.error("Wallet connection error:", e);
+      // Provide more informative error message based on error type
+      if (e.code === 4001) {
+        // User rejected request
+        alert("Wallet connection failed: Connection was rejected by user");
+      } else if (e.code === -32002) {
+        // Request already pending
+        alert("Wallet connection failed: Connection request already pending");
+      } else {
+        alert(`Wallet connection failed: ${e.message || "No active wallet found"}`);
+      }
     }
   };
 
