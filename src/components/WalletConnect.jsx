@@ -26,8 +26,14 @@ export default function WalletConnect({ onConnect }) {
     // Check for various wallet providers
     let ethereum = window.ethereum;
     
+    // Check for different wallet types
+    const hasMetaMask = typeof window.ethereum !== 'undefined' && window.ethereum.isMetaMask;
+    const hasCoinbase = typeof window.ethereum !== 'undefined' && window.ethereum.isCoinbaseWallet;
+    const hasTrustWallet = typeof window.ethereum !== 'undefined' && window.ethereum.isTrust;
+    const hasInjectedWallet = typeof window.ethereum !== 'undefined';
+    
     // If no injected wallet found, try to guide user appropriately
-    if (!ethereum) {
+    if (!hasInjectedWallet) {
       if (isMobile) {
         // On mobile, suggest installing a wallet app
         try {
@@ -69,8 +75,20 @@ export default function WalletConnect({ onConnect }) {
         // User rejected the request
         console.log("User denied account access");
         alert("Connection was cancelled by the user.");
+      } else if (error.code === -32002) {
+        // Request already pending - MetaMask popup already open
+        alert("A connection request is already pending. Please check your wallet extension.");
       } else {
-        alert(`Wallet connection failed: ${error.message}`);
+        // Provide more specific error messages based on the error
+        let errorMessage = `Wallet connection failed: ${error.message}`;
+        
+        if (error.message.includes("not connected to Ethereum network")) {
+          errorMessage = "Wallet is not connected to an Ethereum network. Please switch to Polygon network in your wallet.";
+        } else if (error.message.includes("invalid json rpc response")) {
+          errorMessage = "Invalid response from wallet. Please make sure your wallet is unlocked and try again.";
+        }
+        
+        alert(errorMessage);
       }
     }
   };
