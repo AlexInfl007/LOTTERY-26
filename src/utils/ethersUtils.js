@@ -44,13 +44,30 @@ export function watchTicketEvents(onEvent) {
 export async function buyTicket(signer) {
   try {
     const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-    // Buy ticket with 30 POL payment
-    const tx = await contractWithSigner.buyTicket({ value: ethers.parseEther("30") });
+    
+    // Estimate gas first to avoid missing revert data issues
+    const gasEstimate = await contractWithSigner.buyTicket.estimateGas({ value: ethers.parseEther("30") });
+    
+    // Add some buffer to the gas estimate
+    const gasLimit = Math.floor(gasEstimate * 1.2); // 20% buffer
+    
+    // Buy ticket with 30 POL payment and explicit gas limit
+    const tx = await contractWithSigner.buyTicket({ 
+      value: ethers.parseEther("30"),
+      gasLimit: gasLimit
+    });
+    
     const receipt = await tx.wait();
     return { success: true, transaction: tx, receipt };
   } catch (e) {
     console.error('buyTicket error', e);
-    return { success: false, error: e.message };
+    // Provide more detailed error information
+    return { 
+      success: false, 
+      error: e.reason || e.message || 'Transaction failed',
+      code: e.code,
+      data: e.data
+    };
   }
 }
 
