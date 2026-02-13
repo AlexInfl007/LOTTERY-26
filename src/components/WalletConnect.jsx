@@ -3,6 +3,42 @@ import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { ethers } from 'ethers';
 
+// Helper function to detect the preferred provider among multiple wallets
+function getPreferredProvider() {
+  if (typeof window === 'undefined' || !window.ethereum) {
+    return null;
+  }
+
+  // If there are multiple providers, look for the preferred one
+  if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
+    // Priority order: MetaMask > Coinbase Wallet > Trust Wallet > Others
+    const preferredProviders = [
+      p => p.isMetaMask && !p.isBraveWallet && !p.isTokenary && !p.isAvalanche,
+      p => p.isCoinbaseWallet,
+      p => p.isTrust,
+      p => p.isBraveWallet,
+      p => p.isTokenary,
+      p => p.isAvalanche,
+      p => true // fallback to any provider
+    ];
+
+    for (const predicate of preferredProviders) {
+      for (const provider of window.ethereum.providers) {
+        if (predicate(provider)) {
+          return provider;
+        }
+      }
+    }
+  }
+
+  // If there's a single provider, return it if it's valid
+  if (window.ethereum && window.ethereum.isMetaMask) {
+    return window.ethereum;
+  }
+
+  return window.ethereum;
+}
+
 export default function WalletConnect({ onConnect }) {
   const { t } = useTranslation();
   const [connected, setConnected] = useState(false);
@@ -29,28 +65,8 @@ export default function WalletConnect({ onConnect }) {
     // Wait a bit to ensure any wallet extensions have loaded
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    // Check for various wallet providers
-    let ethereum = window.ethereum;
-    
-    // Enhanced wallet detection - check for various wallet providers
-    if (typeof window !== 'undefined') {
-      // Check for MetaMask specifically (takes precedence)
-      if (window.ethereum && !window.ethereum.isBraveWallet && !window.ethereum.isTrust && !window.ethereum.isCoinbaseWallet) {
-        ethereum = window.ethereum;
-      } 
-      // Check for Coinbase Wallet
-      else if (window.coinbaseWalletExtension) {
-        ethereum = window.coinbaseWalletExtension;
-      } 
-      // Check for Trust Wallet
-      else if (window.ethereum && window.ethereum.isTrust) {
-        ethereum = window.ethereum;
-      }
-      // Fallback to any available ethereum provider
-      else if (!ethereum && window.ethereum) {
-        ethereum = window.ethereum;
-      }
-    }
+    // Use our improved provider detection function
+    const ethereum = getPreferredProvider();
     
     // If no injected wallet found, try to guide user appropriately
     if (!ethereum) {
@@ -74,17 +90,6 @@ export default function WalletConnect({ onConnect }) {
       }
       return;
     }
-    
-    // Additional check for multiple wallets
-    if (ethereum.providers && Array.isArray(ethereum.providers)) {
-      // Multiple wallets detected - use the first one that isn't the standard provider
-      for (let i = 0; i < ethereum.providers.length; i++) {
-        if (!ethereum.providers[i].isMetaMask || ethereum.providers[i].isCoinbaseWallet) {
-          ethereum = ethereum.providers[i];
-          break;
-        }
-      }
-    }
 
     try {
       // First, switch to Polygon network
@@ -98,8 +103,8 @@ export default function WalletConnect({ onConnect }) {
       setAddress(accounts[0]);
       setConnected(true);
       
-      // Create provider and signer
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      // Create provider and signer using the detected ethereum provider
+      const provider = new ethers.BrowserProvider(ethereum);
       const signer = await provider.getSigner();
       
       // Pass the connection details to the parent component
@@ -111,7 +116,17 @@ export default function WalletConnect({ onConnect }) {
         console.log("User denied account access");
         alert("Connection was cancelled by the user.");
       } else {
-        alert(`Wallet connection failed: ${error.message || 'No active wallet found'}`);
+        // More informative error handling
+        let errorMessage = error.message || 'No active wallet found';
+        
+        // Handle common errors more specifically
+        if (error.code === -32002) {
+          errorMessage = 'Request already pending. Check your wallet extension.';
+        } else if (errorMessage.includes('network')) {
+          errorMessage = 'Network switch failed. Please check your wallet settings.';
+        }
+        
+        alert(`Wallet connection failed: ${errorMessage}`);
       }
     } finally {
       setCheckingWallet(false);
