@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import i18n from "../i18n";
+import styles from "../styles/Home.module.css";
 
 const languages = [
-  { code: "en", name: "English" },
-  { code: "ru", name: "Русский" },
-  { code: "es", name: "Español" },
-  { code: "fr", name: "Français" },
-  { code: "de", name: "Deutsch" },
-  { code: "ja", name: "日本語" },
-  { code: "zh", name: "中文" },
-  { code: "ko", name: "한국어" },
+  { code: "en", name: "English", flag: "🇺🇸" },
+  { code: "ru", name: "Русский", flag: "🇷🇺" },
+  { code: "es", name: "Español", flag: "🇪🇸" },
+  { code: "fr", name: "Français", flag: "🇫🇷" },
+  { code: "de", name: "Deutsch", flag: "🇩🇪" },
+  { code: "ja", name: "日本語", flag: "🇯🇵" },
+  { code: "zh", name: "中文", flag: "🇨🇳" },
+  { code: "ko", name: "한국어", flag: "🇰🇷" },
 ];
 
 export default function LanguageSelector() {
@@ -30,29 +31,36 @@ export default function LanguageSelector() {
   const handleLanguageChange = (code) => {
     i18n.changeLanguage(code);
     setSelectedLang(code);
-    setOpen(false);
+    // Don't close immediately to allow for visual feedback
+    setTimeout(() => setOpen(false), 150);
   };
 
+  const currentLanguage = languages.find((l) => l.code === selectedLang);
+
   return (
-    <div className="relative text-white" ref={dropdownRef}>
+    <div className={styles.langWrapper} ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="bg-gray-800 px-3 py-1 rounded-md hover:bg-gray-700 transition text-sm md:text-base"
+        className={styles.langButton}
+        aria-expanded={open}
+        aria-haspopup="true"
       >
-        🌐 {languages.find((l) => l.code === selectedLang)?.name}
+        <span className={styles.flag}>{currentLanguage?.flag}</span>
+        <span className={styles.langName}>{currentLanguage?.name}</span>
+        <span className={`${styles.chev} ${open ? styles.rotated : ''}`}>▼</span>
       </button>
 
       {open && (
-        <ul className="absolute right-0 mt-2 w-48 bg-gray-900 border border-gray-700 rounded-md shadow-lg z-50">
+        <ul className={styles.langMenu} role="menu">
           {languages.map((lang) => (
             <li
               key={lang.code}
               onClick={() => handleLanguageChange(lang.code)}
-              className={`px-4 py-2 cursor-pointer hover:bg-gray-700 ${
-                lang.code === selectedLang ? "bg-gray-800 font-bold" : ""
-              }`}
+              className={styles.langItem}
+              role="menuitem"
             >
-              {lang.name}
+              <span className={styles.flag}>{lang.flag}</span>
+              <span className={styles.langName}>{lang.name}</span>
             </li>
           ))}
         </ul>
