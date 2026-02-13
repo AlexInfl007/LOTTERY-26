@@ -1,245 +1,136 @@
 import React, { useState, useEffect } from "react";
+import { useAccount, useConnect, useDisconnect, useChainId } from 'wagmi';
+import { InjectedConnector } from 'wagmi/connectors/injected';
+import { WalletConnectConnector } from 'wagmi/connectors/walletConnect';
+import { CoinbaseWalletConnector } from 'wagmi/connectors/coinbaseWallet';
+import { MetaMaskConnector } from 'wagmi/connectors/metaMask';
+import { useWeb3Modal } from './Web3Modal';
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
-import { ethers } from 'ethers';
+import { BrowserProvider } from 'ethers';
 
-// Helper function to detect the preferred provider among multiple wallets
-function getPreferredProvider() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
+// Функция для переключения на сеть Polygon
+async function switchToPolygonNetwork(provider) {
+  const polygonChainParams = {
+    chainId: '0x89', // 137 в десятичной системе
+    chainName: 'Polygon Mainnet',
+    nativeCurrency: {
+      name: 'MATIC',
+      symbol: 'MATIC',
+      decimals: 18
+    },
+    rpcUrls: ['https://polygon-rpc.com/'],
+    blockExplorerUrls: ['https://polygonscan.com/']
+  };
 
-  // Wait a bit for wallet extensions to initialize
-  if (!window.ethereum) {
-    return null;
-  }
-
-  // Check for specific wallet providers in order of preference
-  // Check for MetaMask first (most common)
-  if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-    // Multiple providers detected
-    for (const provider of window.ethereum.providers) {
-      // Prioritize MetaMask over other wallets
-      if (provider.isMetaMask && !provider.isBraveWallet && !provider.isTokenary && !provider.isAvalanche && !provider.isBitKeep) {
-        return provider;
+  try {
+    // Попробовать переключиться на сеть Polygon
+    await provider.send('wallet_switchEthereumChain', [{ chainId: polygonChainParams.chainId }]);
+  } catch (switchError) {
+    // Этот код ошибки указывает на то, что цепочка не добавлена в MetaMask
+    if (switchError.code === 4902) {
+      try {
+        // Добавить сеть Polygon в кошелек
+        await provider.send('wallet_addEthereumChain', [polygonChainParams]);
+      } catch (addError) {
+        console.error('Ошибка при добавлении сети Polygon:', addError);
+        throw addError;
       }
-    }
-    
-    // Then check for other known providers
-    for (const provider of window.ethereum.providers) {
-      if (provider.isCoinbaseWallet) return provider;
-      if (provider.isTrustWallet) return provider;
-      if (provider.isBraveWallet) return provider;
-      if (provider.isTokenary) return provider;
-      if (provider.isAvalanche) return provider;
-      if (provider.isBitKeep) return provider;
-    }
-    
-    // Fallback to first available provider
-    return window.ethereum.providers[0];
-  }
-
-  // Single provider case - check for specific wallet types
-  if (window.ethereum.isMetaMask) return window.ethereum;
-  if (window.ethereum.isCoinbaseWallet) return window.ethereum;
-  if (window.ethereum.isTrustWallet) return window.ethereum;
-  if (window.ethereum.isBraveWallet) return window.ethereum;
-  
-  // Fallback to default provider
-  return window.ethereum;
-}
-
-// Function to wait for wallet to be ready
-async function waitForWalletReady() {
-  return new Promise((resolve) => {
-    if (window.ethereum && window.ethereum.isMetaMask) {
-      resolve();
-    } else if (window.ethereum && window.ethereum.providers) {
-      resolve();
     } else {
-      // Wait for wallet to become available
-      let attempts = 0;
-      const checkWallet = () => {
-        attempts++;
-        if (window.ethereum && (window.ethereum.isMetaMask || window.ethereum.providers)) {
-          resolve();
-        } else if (attempts < 10) {
-          setTimeout(checkWallet, 200);
-        } else {
-          resolve();
-        }
-      };
-      checkWallet();
+      console.error('Ошибка при переключении на сеть Polygon:', switchError);
+      throw switchError;
     }
-  });
+  }
 }
 
 export default function WalletConnect({ onConnect }) {
   const { t } = useTranslation();
-  const [connected, setConnected] = useState(false);
-  const [address, setAddress] = useState(null);
-  const [isMobile, setIsMobile] = useState(false);
-  const [checkingWallet, setCheckingWallet] = useState(false);
+  const { address, isConnected, chain } = useWeb3Modal();
+  const { connect, connectors, isLoading, error } = useConnect();
+  const { disconnect } = useDisconnect();
+  const [isConnecting, setIsConnecting] = useState(false);
+  
+  // Получаем экземпляр провайдера через wagmi
+  const wagmiAccount = useAccount();
+  const chainId = useChainId();
 
-  useEffect(() => {
-    // Detect mobile devices
-    const checkIsMobile = () => {
-      setIsMobile(/iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
-    };
-    
-    checkIsMobile();
-    window.addEventListener('resize', checkIsMobile);
-    return () => window.removeEventListener('resize', checkIsMobile);
-  }, []);
-
-  const connect = async () => {
-    if (typeof window === "undefined") return;
-    
-    setCheckingWallet(true);
-    
-    // Wait a bit to ensure any wallet extensions have loaded
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Use our improved provider detection function
-    const ethereum = getPreferredProvider();
-    
-    // If no injected wallet found, try to guide user appropriately
-    if (!ethereum) {
-      setCheckingWallet(false);
-      if (isMobile) {
-        // On mobile, suggest installing a wallet app with deep linking support
-        try {
-          // Use the actual domain of the site
-          const currentDomain = window.location.hostname;
-          // Try deep linking for various popular wallets
-          const wallets = [
-            `https://metamask.app.link/dapp/${currentDomain}`,
-            `https://link.trustwallet.com/open_url?url=https://${currentDomain}`,
-            `https://go.cb-w.com/dapp?cb_url=https://${currentDomain}`,
-            `https://www.okx.com/web3/dapp?dappUrl=https://${currentDomain}`,
-            `https://token.im/download`,
-            'https://metamask.io/download/',
-            'https://trustwallet.com/download',
-            'https://coinbase.com/wallet/downloads'
-          ];
-          
-          // Try to open the first available deep link
-          for (const walletLink of wallets) {
-            try {
-              window.location.href = walletLink;
-              break;
-            } catch (e) {
-              console.log(`Failed to open wallet link: ${walletLink}`);
-            }
-          }
-        } catch (error) {
-          console.error("Error opening wallet deep link:", error);
-        }
-        alert("Please install a crypto wallet like MetaMask, Trust Wallet, or Coinbase Wallet. Then refresh the page to connect.");
-      } else {
-        // On desktop, suggest installing MetaMask or other wallet extension
-        alert("Please install a crypto wallet like MetaMask, Trust Wallet, or Coinbase Wallet. Then refresh the page to connect.");
-      }
-      return;
-    }
-
+  // Обработка подключения
+  const handleConnect = async (connector) => {
     try {
-      // First, switch to Polygon network
-      await switchToPolygonNetwork();
+      setIsConnecting(true);
       
-      // Request account access
-      const accounts = await ethereum.request({ 
-        method: "eth_requestAccounts" 
-      });
+      // Подключаем выбранный кошелек
+      const result = await connect({ connector });
       
-      // Check if we got valid accounts
-      if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts returned from wallet');
-      }
-      
-      setAddress(accounts[0]);
-      setConnected(true);
-      
-      // Create provider and signer using the detected ethereum provider
-      const provider = new ethers.BrowserProvider(ethereum);
-      const signer = await provider.getSigner();
-      
-      // Pass the connection details to the parent component
-      onConnect && onConnect(accounts[0], provider, signer);
-    } catch (error) {
-      console.error("Wallet connection error:", error);
-      if (error.code === 4001) {
-        // User rejected the request
-        console.log("User denied account access");
-        alert("Connection was cancelled by the user. Please try again and approve the connection in your wallet.");
-      } else {
-        // More informative error handling
-        let errorMessage = error.message || 'No active wallet found';
+      if (result) {
+        // Создаем провайдер после успешного подключения
+        const provider = new BrowserProvider(wagmiAccount.connector.provider);
         
-        // Handle common errors more specifically
-        if (error.code === -32002) {
-          errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
-        } else if (errorMessage.includes('network')) {
-          errorMessage = 'Network switch failed. Please check your wallet settings and ensure Polygon network is added.';
-        } else if (errorMessage.includes('user rejected')) {
-          errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
-        } else if (errorMessage.includes('invalid json rpc')) {
-          errorMessage = 'Invalid JSON-RPC response. Make sure your wallet is unlocked and properly configured.';
-        }
+        // Переключаем на сеть Polygon
+        await switchToPolygonNetwork(provider);
         
-        alert(`Wallet connection failed: ${errorMessage}`);
+        // Получаем signer
+        const signer = await provider.getSigner();
+        
+        // Вызываем переданную функцию обратного вызова
+        onConnect && onConnect(result.account, provider, signer);
       }
+    } catch (err) {
+      console.error("Ошибка подключения:", err);
+      alert(`Ошибка подключения: ${err.message || 'Неизвестная ошибка'}`);
     } finally {
-      setCheckingWallet(false);
+      setIsConnecting(false);
     }
   };
 
-  const switchToPolygonNetwork = async () => {
-    const polygonChainParams = {
-      chainId: '0x89', // 137 in decimal
-      chainName: 'Polygon Mainnet',
-      nativeCurrency: {
-        name: 'MATIC',
-        symbol: 'MATIC',
-        decimals: 18
-      },
-      rpcUrls: ['https://polygon-rpc.com/'],
-      blockExplorerUrls: ['https://polygonscan.com/']
-    };
+  // Определение текста кнопки в зависимости от состояния
+  const renderContent = () => {
+    if (isConnected && address) {
+      return (
+        <>
+          <span>🔒</span>
+          {`${address.slice(0,6)}…${address.slice(-4)}`}
+        </>
+      );
+    } else if (isConnecting || isLoading) {
+      return (
+        <>
+          <span>⏳</span>
+          {t("connecting","Подключение...")}
+        </>
+      );
+    } else {
+      return (
+        <>
+          <span>🔒</span>
+          {t("connectWallet","Подключить кошелек")}
+        </>
+      );
+    }
+  };
 
-    try {
-      // Try to switch to Polygon network
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: polygonChainParams.chainId }],
+  // Открытие модального окна Web3Modal при клике, если не подключен
+  const handleClick = () => {
+    if (!isConnected) {
+      // Используем глобальную функцию от Web3Modal для открытия
+      import('@web3modal/wagmi').then(module => {
+        module.open();
       });
-    } catch (switchError) {
-      // This error code indicates that the chain is not added to MetaMask
-      if (switchError.code === 4902) {
-        try {
-          // Add the Polygon network to the wallet
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [polygonChainParams],
-          });
-        } catch (addError) {
-          console.error('Error adding Polygon network:', addError);
-          throw addError;
-        }
-      } else {
-        console.error('Error switching to Polygon network:', switchError);
-        throw switchError;
+    } else {
+      // При клике на уже подключенный кошелек можно предложить отключиться
+      if (window.confirm('Вы хотите отключить кошелек?')) {
+        disconnect();
+        onConnect && onConnect(null, null, null);
       }
     }
   };
 
   return (
     <button
-      onClick={connect}
+      onClick={handleClick}
       className={styles.connectButton}
     >
-      <span>🔒</span>
-      {connected ? (address ? `${address.slice(0,6)}…${address.slice(-4)}` : t("connected","Connected")) : t("connectWallet","Connect Wallet")}
+      {renderContent()}
     </button>
   );
 }
