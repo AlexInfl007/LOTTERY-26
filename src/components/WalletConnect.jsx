@@ -80,7 +80,7 @@ export default function WalletConnect({ onConnect }) {
   useEffect(() => {
     // Detect mobile devices
     const checkIsMobile = () => {
-      setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+      setIsMobile(/iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
     };
     
     checkIsMobile();
@@ -103,21 +103,38 @@ export default function WalletConnect({ onConnect }) {
     if (!ethereum) {
       setCheckingWallet(false);
       if (isMobile) {
-        // On mobile, suggest installing a wallet app
+        // On mobile, suggest installing a wallet app with deep linking support
         try {
           // Use the actual domain of the site
           const currentDomain = window.location.hostname;
-          const metamaskLink = currentDomain !== 'localhost' 
-            ? `https://metamask.app.link/dapp/${currentDomain}`
-            : 'https://metamask.io/download/';
-          window.open(metamaskLink, '_blank');
+          // Try deep linking for various popular wallets
+          const wallets = [
+            `https://metamask.app.link/dapp/${currentDomain}`,
+            `https://link.trustwallet.com/open_url?url=https://${currentDomain}`,
+            `https://go.cb-w.com/dapp?cb_url=https://${currentDomain}`,
+            `https://www.okx.com/web3/dapp?dappUrl=https://${currentDomain}`,
+            `https://token.im/download`,
+            'https://metamask.io/download/',
+            'https://trustwallet.com/download',
+            'https://coinbase.com/wallet/downloads'
+          ];
+          
+          // Try to open the first available deep link
+          for (const walletLink of wallets) {
+            try {
+              window.location.href = walletLink;
+              break;
+            } catch (e) {
+              console.log(`Failed to open wallet link: ${walletLink}`);
+            }
+          }
         } catch (error) {
-          // Fallback if opening the link fails
+          console.error("Error opening wallet deep link:", error);
         }
-        alert("Please install a crypto wallet like MetaMask, Trust Wallet, or Coinbase Wallet.");
+        alert("Please install a crypto wallet like MetaMask, Trust Wallet, or Coinbase Wallet. Then refresh the page to connect.");
       } else {
         // On desktop, suggest installing MetaMask or other wallet extension
-        alert("Please install a crypto wallet like MetaMask, Trust Wallet, or Coinbase Wallet.");
+        alert("Please install a crypto wallet like MetaMask, Trust Wallet, or Coinbase Wallet. Then refresh the page to connect.");
       }
       return;
     }
@@ -145,16 +162,18 @@ export default function WalletConnect({ onConnect }) {
       if (error.code === 4001) {
         // User rejected the request
         console.log("User denied account access");
-        alert("Connection was cancelled by the user.");
+        alert("Connection was cancelled by the user. Please try again and approve the connection in your wallet.");
       } else {
         // More informative error handling
         let errorMessage = error.message || 'No active wallet found';
         
         // Handle common errors more specifically
         if (error.code === -32002) {
-          errorMessage = 'Request already pending. Check your wallet extension.';
+          errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
         } else if (errorMessage.includes('network')) {
-          errorMessage = 'Network switch failed. Please check your wallet settings.';
+          errorMessage = 'Network switch failed. Please check your wallet settings and ensure Polygon network is added.';
+        } else if (errorMessage.includes('user rejected')) {
+          errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
         }
         
         alert(`Wallet connection failed: ${errorMessage}`);
