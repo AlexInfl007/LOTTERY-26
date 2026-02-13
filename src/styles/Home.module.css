@@ -135,11 +135,28 @@
   align-items: center;
   gap: 0.5rem;
   transition: all 0.2s ease;
+  min-width: 120px;
+  justify-content: space-between;
 }
 
 .langButton:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: var(--primary);
+}
+
+.langName {
+  display: inline-block;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flag {
+  font-size: 1.2em;
+  display: inline-block;
+  min-width: 1.5em;
+  text-align: center;
 }
 
 .chev {
@@ -166,6 +183,7 @@
   z-index: 100;
   max-height: 300px;
   overflow-y: auto;
+  min-width: 140px;
 }
 
 .langMenu.open {
@@ -181,6 +199,9 @@
   cursor: pointer;
   color: var(--text-primary);
   transition: background 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .langItem:hover {
