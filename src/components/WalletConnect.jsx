@@ -3,58 +3,56 @@ import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { ethers } from 'ethers';
 
-// Helper function to detect the preferred provider among multiple wallets
-function getPreferredProvider() {
-  if (typeof window === 'undefined') {
-    return null;
+// Function to detect all available wallet providers
+function getAllAvailableProviders() {
+  if (typeof window === 'undefined' || !window.ethereum) {
+    return [];
   }
 
-  // Wait a bit for wallet extensions to initialize
-  if (!window.ethereum) {
-    return null;
-  }
-
-  // Check for specific wallet providers in order of preference
-  // Check for MetaMask first (most common)
+  // If there are multiple providers (window.ethereum.providers array)
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-    // Multiple providers detected
-    for (const provider of window.ethereum.providers) {
-      // Prioritize MetaMask over other wallets
-      if (provider.isMetaMask && !provider.isBraveWallet && !provider.isTokenary && !provider.isAvalanche && !provider.isBitKeep) {
-        return provider;
-      }
-    }
-    
-    // Then check for other known providers
-    for (const provider of window.ethereum.providers) {
-      if (provider.isCoinbaseWallet) return provider;
-      if (provider.isTrustWallet) return provider;
-      if (provider.isBraveWallet) return provider;
-      if (provider.isTokenary) return provider;
-      if (provider.isAvalanche) return provider;
-      if (provider.isBitKeep) return provider;
-    }
-    
-    // Fallback to first available provider
-    return window.ethereum.providers[0];
+    return window.ethereum.providers.map(provider => {
+      let name = 'Unknown Wallet';
+      if (provider.isMetaMask) name = 'MetaMask';
+      else if (provider.isCoinbaseWallet) name = 'Coinbase Wallet';
+      else if (provider.isTrustWallet) name = 'Trust Wallet';
+      else if (provider.isBraveWallet) name = 'Brave Wallet';
+      else if (provider.isTokenary) name = 'Tokenary';
+      else if (provider.isAvalanche) name = 'Core Wallet';
+      else if (provider.isBitKeep) name = 'BitKeep';
+      else if (provider.isOkxWallet || provider.isOKExWallet) name = 'OKX Wallet';
+      else if (provider.isPhantom) name = 'Phantom';
+      else if (provider.isRabby) name = 'Rabby';
+      else if (provider.isImToken) name = 'imToken';
+      else if (provider.isMathWallet) name = 'MathWallet';
+      
+      return { provider, name, id: name.toLowerCase().replace(/\s+/g, '') };
+    });
   }
 
-  // Single provider case - check for specific wallet types
-  if (window.ethereum.isMetaMask) return window.ethereum;
-  if (window.ethereum.isCoinbaseWallet) return window.ethereum;
-  if (window.ethereum.isTrustWallet) return window.ethereum;
-  if (window.ethereum.isBraveWallet) return window.ethereum;
+  // If there's a single provider, detect its type
+  const singleProvider = window.ethereum;
+  let name = 'Injected Wallet';
+  if (singleProvider.isMetaMask) name = 'MetaMask';
+  else if (singleProvider.isCoinbaseWallet) name = 'Coinbase Wallet';
+  else if (singleProvider.isTrustWallet) name = 'Trust Wallet';
+  else if (singleProvider.isBraveWallet) name = 'Brave Wallet';
+  else if (singleProvider.isTokenary) name = 'Tokenary';
+  else if (singleProvider.isAvalanche) name = 'Core Wallet';
+  else if (singleProvider.isBitKeep) name = 'BitKeep';
+  else if (singleProvider.isOkxWallet || singleProvider.isOKExWallet) name = 'OKX Wallet';
+  else if (singleProvider.isPhantom) name = 'Phantom';
+  else if (singleProvider.isRabby) name = 'Rabby';
+  else if (singleProvider.isImToken) name = 'imToken';
+  else if (singleProvider.isMathWallet) name = 'MathWallet';
   
-  // Fallback to default provider
-  return window.ethereum;
+  return [{ provider: singleProvider, name, id: name.toLowerCase().replace(/\s+/g, '') }];
 }
 
 // Function to wait for wallet to be ready
 async function waitForWalletReady() {
   return new Promise((resolve) => {
-    if (window.ethereum && window.ethereum.isMetaMask) {
-      resolve();
-    } else if (window.ethereum && window.ethereum.providers) {
+    if (window.ethereum && (window.ethereum.isMetaMask || window.ethereum.providers)) {
       resolve();
     } else {
       // Wait for wallet to become available
@@ -80,6 +78,8 @@ export default function WalletConnect({ onConnect }) {
   const [address, setAddress] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [checkingWallet, setCheckingWallet] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [availableProviders, setAvailableProviders] = useState([]);
 
   useEffect(() => {
     // Detect mobile devices
@@ -92,6 +92,63 @@ export default function WalletConnect({ onConnect }) {
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
+  const connectWithProvider = async (ethereum) => {
+    if (!ethereum) return;
+
+    try {
+      // First, switch to Polygon network
+      await switchToPolygonNetwork();
+      
+      // Request account access
+      const accounts = await ethereum.request({ 
+        method: "eth_requestAccounts" 
+      });
+      
+      // Check if we got valid accounts
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts returned from wallet');
+      }
+      
+      setAddress(accounts[0]);
+      setConnected(true);
+      
+      // Create provider and signer using the detected ethereum provider
+      const provider = new ethers.BrowserProvider(ethereum);
+      const signer = await provider.getSigner();
+      
+      // Close modal after successful connection
+      setShowWalletModal(false);
+      
+      // Pass the connection details to the parent component
+      onConnect && onConnect(accounts[0], provider, signer);
+    } catch (error) {
+      console.error("Wallet connection error:", error);
+      if (error.code === 4001) {
+        // User rejected the request
+        console.log("User denied account access");
+        alert("Connection was cancelled by the user. Please try again and approve the connection in your wallet.");
+      } else {
+        // More informative error handling
+        let errorMessage = error.message || 'No active wallet found';
+        
+        // Handle common errors more specifically
+        if (error.code === -32002) {
+          errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
+        } else if (errorMessage.includes('network')) {
+          errorMessage = 'Network switch failed. Please check your wallet settings and ensure Polygon network is added.';
+        } else if (errorMessage.includes('user rejected')) {
+          errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
+        } else if (errorMessage.includes('invalid json rpc')) {
+          errorMessage = 'Invalid JSON-RPC response. Make sure your wallet is unlocked and properly configured.';
+        }
+        
+        alert(`Wallet connection failed: ${errorMessage}`);
+      }
+    } finally {
+      setCheckingWallet(false);
+    }
+  };
+
   const connect = async () => {
     if (typeof window === "undefined") return;
     
@@ -100,11 +157,10 @@ export default function WalletConnect({ onConnect }) {
     // Wait a bit to ensure any wallet extensions have loaded
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    // Use our improved provider detection function
-    const ethereum = getPreferredProvider();
+    // Get all available providers
+    const providers = getAllAvailableProviders();
     
-    // If no injected wallet found, try to guide user appropriately
-    if (!ethereum) {
+    if (providers.length === 0) {
       setCheckingWallet(false);
       if (isMobile) {
         // On mobile, suggest installing a wallet app with deep linking support
@@ -142,56 +198,17 @@ export default function WalletConnect({ onConnect }) {
       }
       return;
     }
-
-    try {
-      // First, switch to Polygon network
-      await switchToPolygonNetwork();
-      
-      // Request account access
-      const accounts = await ethereum.request({ 
-        method: "eth_requestAccounts" 
-      });
-      
-      // Check if we got valid accounts
-      if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts returned from wallet');
-      }
-      
-      setAddress(accounts[0]);
-      setConnected(true);
-      
-      // Create provider and signer using the detected ethereum provider
-      const provider = new ethers.BrowserProvider(ethereum);
-      const signer = await provider.getSigner();
-      
-      // Pass the connection details to the parent component
-      onConnect && onConnect(accounts[0], provider, signer);
-    } catch (error) {
-      console.error("Wallet connection error:", error);
-      if (error.code === 4001) {
-        // User rejected the request
-        console.log("User denied account access");
-        alert("Connection was cancelled by the user. Please try again and approve the connection in your wallet.");
-      } else {
-        // More informative error handling
-        let errorMessage = error.message || 'No active wallet found';
-        
-        // Handle common errors more specifically
-        if (error.code === -32002) {
-          errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
-        } else if (errorMessage.includes('network')) {
-          errorMessage = 'Network switch failed. Please check your wallet settings and ensure Polygon network is added.';
-        } else if (errorMessage.includes('user rejected')) {
-          errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
-        } else if (errorMessage.includes('invalid json rpc')) {
-          errorMessage = 'Invalid JSON-RPC response. Make sure your wallet is unlocked and properly configured.';
-        }
-        
-        alert(`Wallet connection failed: ${errorMessage}`);
-      }
-    } finally {
-      setCheckingWallet(false);
+    
+    // If there's only one provider, connect directly
+    if (providers.length === 1) {
+      await connectWithProvider(providers[0].provider);
+      return;
     }
+    
+    // If there are multiple providers, show selection modal
+    setAvailableProviders(providers);
+    setShowWalletModal(true);
+    setCheckingWallet(false);
   };
 
   const switchToPolygonNetwork = async () => {
@@ -234,12 +251,42 @@ export default function WalletConnect({ onConnect }) {
   };
 
   return (
-    <button
-      onClick={connect}
-      className={styles.connectButton}
-    >
-      <span>🔒</span>
-      {connected ? (address ? `${address.slice(0,6)}…${address.slice(-4)}` : t("connected","Connected")) : t("connectWallet","Connect Wallet")}
-    </button>
+    <>
+      <button
+        onClick={connect}
+        className={styles.connectButton}
+      >
+        <span>🔒</span>
+        {connected ? (address ? `${address.slice(0,6)}…${address.slice(-4)}` : t("connected","Connected")) : t("connectWallet","Connect Wallet")}
+      </button>
+
+      {/* Wallet Selection Modal */}
+      {showWalletModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowWalletModal(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <h3>Select a Wallet</h3>
+            <p className={styles.modalSubtitle}>Choose which wallet you'd like to connect with:</p>
+            <div className={styles.walletList}>
+              {availableProviders.map((wallet, index) => (
+                <button
+                  key={index}
+                  className={styles.walletOption}
+                  onClick={() => connectWithProvider(wallet.provider)}
+                >
+                  <span className={styles.walletIcon}>👛</span>
+                  <span className={styles.walletName}>{wallet.name}</span>
+                </button>
+              ))}
+            </div>
+            <button 
+              className={styles.cancelButton}
+              onClick={() => setShowWalletModal(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

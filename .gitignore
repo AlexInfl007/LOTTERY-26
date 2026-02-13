@@ -1,8 +1,8 @@
-```
+```gitignore
 # Dependencies
 node_modules/
 
-# Build artifacts
+# Build outputs
 dist/
 build/
 target/
@@ -17,30 +17,12 @@ env/
 venv/
 .venv/
 .ENV
-.venv.bak/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-*.pot
-*.pyc
-*.pyo
-*.pyd
-.MF
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
+.ENV.local
 
 # Logs
 *.log
 
-# Environment variables
+# Environment specific
 .env
 .env.local
 .env.*
@@ -50,15 +32,18 @@ coverage.xml
 .idea/
 *.swp
 *.swo
-*~
+*.tmp
+
+# OS
 .DS_Store
 Thumbs.db
 
 # Coverage
 coverage/
 htmlcov/
+.coverage
 
-# Compressed files
+# Compressed
 *.zip
 *.gz
 *.tar
