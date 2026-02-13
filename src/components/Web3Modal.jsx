@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { createWeb3Modal, defaultConfig } from '@web3modal/wagmi/react';
+import { createWeb3Modal } from '@web3modal/wagmi';
 
 import { cookieStorage, createConfig, createStorage, http } from 'wagmi';
 import { mainnet, polygon, arbitrum, optimism } from 'viem/chains';
