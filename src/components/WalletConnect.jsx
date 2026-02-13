@@ -56,6 +56,9 @@ export default function WalletConnect({ onConnect }) {
     }
 
     try {
+      // First, switch to Polygon network
+      await switchToPolygonNetwork();
+      
       // Request account access
       const accounts = await ethereum.request({ 
         method: "eth_requestAccounts" 
@@ -81,6 +84,45 @@ export default function WalletConnect({ onConnect }) {
       }
     } finally {
       setCheckingWallet(false);
+    }
+  };
+
+  const switchToPolygonNetwork = async () => {
+    const polygonChainParams = {
+      chainId: '0x89', // 137 in decimal
+      chainName: 'Polygon Mainnet',
+      nativeCurrency: {
+        name: 'MATIC',
+        symbol: 'MATIC',
+        decimals: 18
+      },
+      rpcUrls: ['https://polygon-rpc.com/'],
+      blockExplorerUrls: ['https://polygonscan.com/']
+    };
+
+    try {
+      // Try to switch to Polygon network
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: polygonChainParams.chainId }],
+      });
+    } catch (switchError) {
+      // This error code indicates that the chain is not added to MetaMask
+      if (switchError.code === 4902) {
+        try {
+          // Add the Polygon network to the wallet
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [polygonChainParams],
+          });
+        } catch (addError) {
+          console.error('Error adding Polygon network:', addError);
+          throw addError;
+        }
+      } else {
+        console.error('Error switching to Polygon network:', switchError);
+        throw switchError;
+      }
     }
   };
 

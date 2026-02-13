@@ -44,9 +44,8 @@ export function watchTicketEvents(onEvent) {
 export async function buyTicket(signer) {
   try {
     const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-    // Assuming 30 POL per ticket - this needs to be adjusted based on the actual contract
-    // For now we'll call the buyTicket function with proper parameters
-    const tx = await contractWithSigner.buyTicket(ethers.parseEther("30"), { value: ethers.parseEther("30") });
+    // Buy ticket with 30 POL payment
+    const tx = await contractWithSigner.buyTicket({ value: ethers.parseEther("30") });
     await tx.wait();
     return { success: true, transaction: tx };
   } catch (e) {
