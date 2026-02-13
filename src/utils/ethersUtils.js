@@ -39,3 +39,25 @@ export function watchTicketEvents(onEvent) {
     contract.off('TicketBought', handler);
   };
 }
+
+// Function to buy a ticket
+export async function buyTicket(signer) {
+  try {
+    const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+    // Assuming 30 POL per ticket - this needs to be adjusted based on the actual contract
+    // For now we'll call the buyTicket function with proper parameters
+    const tx = await contractWithSigner.buyTicket(ethers.parseEther("30"), { value: ethers.parseEther("30") });
+    await tx.wait();
+    return { success: true, transaction: tx };
+  } catch (e) {
+    console.error('buyTicket error', e);
+    return { success: false, error: e.message };
+  }
+}
+
+// Function to get connected wallet's tickets
+export async function getUserTickets(walletAddress) {
+  // This would need to be implemented based on the actual contract structure
+  // For now, returning a mock implementation
+  return 0;
+}
