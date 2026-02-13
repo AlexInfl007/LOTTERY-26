@@ -145,6 +145,11 @@
 .chev {
   opacity: 0.7;
   font-size: 0.75rem;
+  transition: transform 0.2s ease;
+}
+
+.rotated {
+  transform: rotate(180deg);
 }
 
 .langMenu {
@@ -159,6 +164,12 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   display: none;
   z-index: 100;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.langMenu.open {
+  display: block;
 }
 
 .langWrapper:hover .langMenu {

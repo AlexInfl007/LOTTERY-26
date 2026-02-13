@@ -8,6 +8,7 @@ export default function WalletConnect({ onConnect }) {
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [checkingWallet, setCheckingWallet] = useState(false);
 
   useEffect(() => {
     // Detect mobile devices
@@ -23,11 +24,17 @@ export default function WalletConnect({ onConnect }) {
   const connect = async () => {
     if (typeof window === "undefined") return;
     
+    setCheckingWallet(true);
+    
+    // Wait a bit to ensure any wallet extensions have loaded
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     // Check for various wallet providers
     let ethereum = window.ethereum;
     
     // If no injected wallet found, try to guide user appropriately
     if (!ethereum) {
+      setCheckingWallet(false);
       if (isMobile) {
         // On mobile, suggest installing a wallet app
         try {
@@ -70,8 +77,10 @@ export default function WalletConnect({ onConnect }) {
         console.log("User denied account access");
         alert("Connection was cancelled by the user.");
       } else {
-        alert(`Wallet connection failed: ${error.message}`);
+        alert(`Wallet connection failed: ${error.message || 'No active wallet found'}`);
       }
+    } finally {
+      setCheckingWallet(false);
     }
   };
 

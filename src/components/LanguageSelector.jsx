@@ -44,7 +44,7 @@ export default function LanguageSelector() {
       >
         <span>{currentLanguage?.flag}</span>
         <span>{currentLanguage?.name}</span>
-        <span className={styles.chev}>▼</span>
+        <span className={`${styles.chev} ${open ? styles.rotated : ''}`}>▼</span>
       </button>
 
       {open && (
