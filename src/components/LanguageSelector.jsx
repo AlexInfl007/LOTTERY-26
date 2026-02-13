@@ -31,7 +31,8 @@ export default function LanguageSelector() {
   const handleLanguageChange = (code) => {
     i18n.changeLanguage(code);
     setSelectedLang(code);
-    setOpen(false);
+    // Don't close immediately to allow for visual feedback
+    setTimeout(() => setOpen(false), 150);
   };
 
   const currentLanguage = languages.find((l) => l.code === selectedLang);
@@ -41,22 +42,25 @@ export default function LanguageSelector() {
       <button
         onClick={() => setOpen(!open)}
         className={styles.langButton}
+        aria-expanded={open}
+        aria-haspopup="true"
       >
-        <span>{currentLanguage?.flag}</span>
-        <span>{currentLanguage?.name}</span>
+        <span className={styles.flag}>{currentLanguage?.flag}</span>
+        <span className={styles.langName}>{currentLanguage?.name}</span>
         <span className={`${styles.chev} ${open ? styles.rotated : ''}`}>▼</span>
       </button>
 
       {open && (
-        <ul className={styles.langMenu}>
+        <ul className={styles.langMenu} role="menu">
           {languages.map((lang) => (
             <li
               key={lang.code}
               onClick={() => handleLanguageChange(lang.code)}
               className={styles.langItem}
+              role="menuitem"
             >
-              <span>{lang.flag}</span>
-              <span>{lang.name}</span>
+              <span className={styles.flag}>{lang.flag}</span>
+              <span className={styles.langName}>{lang.name}</span>
             </li>
           ))}
         </ul>

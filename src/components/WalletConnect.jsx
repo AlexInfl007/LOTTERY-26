@@ -5,7 +5,12 @@ import { ethers } from 'ethers';
 
 // Helper function to detect the preferred provider among multiple wallets
 function getPreferredProvider() {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // Wait a bit for wallet extensions to initialize
+  if (!window.ethereum) {
     return null;
   }
 
@@ -32,11 +37,37 @@ function getPreferredProvider() {
   }
 
   // If there's a single provider, return it if it's valid
-  if (window.ethereum && window.ethereum.isMetaMask) {
+  if (window.ethereum.isMetaMask) {
     return window.ethereum;
   }
 
+  // Return the default ethereum provider
   return window.ethereum;
+}
+
+// Function to wait for wallet to be ready
+async function waitForWalletReady() {
+  return new Promise((resolve) => {
+    if (window.ethereum && window.ethereum.isMetaMask) {
+      resolve();
+    } else if (window.ethereum && window.ethereum.providers) {
+      resolve();
+    } else {
+      // Wait for wallet to become available
+      let attempts = 0;
+      const checkWallet = () => {
+        attempts++;
+        if (window.ethereum && (window.ethereum.isMetaMask || window.ethereum.providers)) {
+          resolve();
+        } else if (attempts < 10) {
+          setTimeout(checkWallet, 200);
+        } else {
+          resolve();
+        }
+      };
+      checkWallet();
+    }
+  });
 }
 
 export default function WalletConnect({ onConnect }) {
