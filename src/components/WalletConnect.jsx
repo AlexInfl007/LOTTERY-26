@@ -14,34 +14,38 @@ function getPreferredProvider() {
     return null;
   }
 
-  // If there are multiple providers, look for the preferred one
+  // Check for specific wallet providers in order of preference
+  // Check for MetaMask first (most common)
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-    // Priority order: MetaMask > Coinbase Wallet > Trust Wallet > Others
-    const preferredProviders = [
-      p => p.isMetaMask && !p.isBraveWallet && !p.isTokenary && !p.isAvalanche,
-      p => p.isCoinbaseWallet,
-      p => p.isTrust,
-      p => p.isBraveWallet,
-      p => p.isTokenary,
-      p => p.isAvalanche,
-      p => true // fallback to any provider
-    ];
-
-    for (const predicate of preferredProviders) {
-      for (const provider of window.ethereum.providers) {
-        if (predicate(provider)) {
-          return provider;
-        }
+    // Multiple providers detected
+    for (const provider of window.ethereum.providers) {
+      // Prioritize MetaMask over other wallets
+      if (provider.isMetaMask && !provider.isBraveWallet && !provider.isTokenary && !provider.isAvalanche && !provider.isBitKeep) {
+        return provider;
       }
     }
+    
+    // Then check for other known providers
+    for (const provider of window.ethereum.providers) {
+      if (provider.isCoinbaseWallet) return provider;
+      if (provider.isTrustWallet) return provider;
+      if (provider.isBraveWallet) return provider;
+      if (provider.isTokenary) return provider;
+      if (provider.isAvalanche) return provider;
+      if (provider.isBitKeep) return provider;
+    }
+    
+    // Fallback to first available provider
+    return window.ethereum.providers[0];
   }
 
-  // If there's a single provider, return it if it's valid
-  if (window.ethereum.isMetaMask) {
-    return window.ethereum;
-  }
-
-  // Return the default ethereum provider
+  // Single provider case - check for specific wallet types
+  if (window.ethereum.isMetaMask) return window.ethereum;
+  if (window.ethereum.isCoinbaseWallet) return window.ethereum;
+  if (window.ethereum.isTrustWallet) return window.ethereum;
+  if (window.ethereum.isBraveWallet) return window.ethereum;
+  
+  // Fallback to default provider
   return window.ethereum;
 }
 
@@ -148,6 +152,11 @@ export default function WalletConnect({ onConnect }) {
         method: "eth_requestAccounts" 
       });
       
+      // Check if we got valid accounts
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts returned from wallet');
+      }
+      
       setAddress(accounts[0]);
       setConnected(true);
       
@@ -174,6 +183,8 @@ export default function WalletConnect({ onConnect }) {
           errorMessage = 'Network switch failed. Please check your wallet settings and ensure Polygon network is added.';
         } else if (errorMessage.includes('user rejected')) {
           errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
+        } else if (errorMessage.includes('invalid json rpc')) {
+          errorMessage = 'Invalid JSON-RPC response. Make sure your wallet is unlocked and properly configured.';
         }
         
         alert(`Wallet connection failed: ${errorMessage}`);

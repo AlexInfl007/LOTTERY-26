@@ -339,6 +339,10 @@
   border: 1px solid var(--border);
 }
 
+.progressWrap {
+  position: relative;
+}
+
 .progressFill {
   position: absolute;
   left: 0;
@@ -406,6 +410,22 @@
   border-radius: 10px;
   box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
   transition: width 1s ease-in-out;
+}
+
+/* Center amount outside progress bar - positioned in the middle of the container */
+.progressCenterAmountOutside {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
+  z-index: 3;
+  white-space: nowrap;
+  padding: 0 4px;
+  background: rgba(139, 92, 246, 0.8);
+  border-radius: 4px;
 }
 
 /* description */

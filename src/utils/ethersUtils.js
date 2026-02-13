@@ -32,6 +32,32 @@ export function watchTicketEvents(onEvent) {
     }
   };
 
+  // Listen on the contract for TicketBought events
+  contract.on('TicketBought', handler);
+
+  // return unsubscribe
+  return () => {
+    contract.off('TicketBought', handler);
+  };
+}
+
+// Subscribe to PrizePool updates to keep track of the pool amount
+export function watchPrizePoolUpdates(onUpdate) {
+  // Since we don't have a specific event for prize pool updates, we'll monitor
+  // the TicketBought event which affects the pool, and also provide a way to manually refresh
+  const handler = (buyer, round) => {
+    try {
+      // When a ticket is bought, the prize pool increases
+      readPrizePool().then(poolAmount => {
+        onUpdate(poolAmount);
+      }).catch(err => {
+        console.error('Error reading prize pool after ticket purchase:', err);
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   contract.on('TicketBought', handler);
 
   // return unsubscribe
@@ -46,29 +72,27 @@ export async function buyTicket(signer) {
     const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
     
     // First, check if the user has enough balance
-    const userBalance = await signer.provider.getBalance(await signer.getAddress());
+    const userAddress = await signer.getAddress();
+    const userBalance = await signer.provider.getBalance(userAddress);
     const ticketPrice = ethers.parseEther("30"); // 30 POL
     
     if (userBalance < ticketPrice) {
       throw new Error(`Insufficient balance. Need 30 POL but only have ${(Number(ethers.formatEther(userBalance))).toFixed(4)} POL`);
     }
     
-    // Estimate gas first to avoid missing revert data issues
-    const gasEstimate = await contractWithSigner.buyTicket.estimateGas({ value: ticketPrice });
-    
-    // Add some buffer to the gas estimate
-    const gasLimit = Math.floor(gasEstimate * 1.3); // 30% buffer to be safe
-    
-    // Buy ticket with 30 POL payment and explicit gas limit
-    const tx = await contractWithSigner.buyTicket({ 
+    // Prepare transaction object with a higher gas limit to be safe
+    const txRequest = {
       value: ticketPrice,
-      gasLimit: gasLimit
-    });
+      gasLimit: 500000 // Set a reasonable gas limit upfront to avoid estimation issues
+    };
+    
+    // Buy ticket with 30 POL payment
+    const tx = await contractWithSigner.buyTicket(txRequest);
     
     // Wait for transaction receipt
     const receipt = await tx.wait();
     
-    if (receipt.status === 1) { // Success
+    if (receipt && receipt.status === 1) { // Success
       return { success: true, transaction: tx, receipt };
     } else { // Failed
       throw new Error('Transaction failed: Receipt status is 0');
@@ -78,7 +102,7 @@ export async function buyTicket(signer) {
     // Provide more detailed error information
     return { 
       success: false, 
-      error: e.reason || e.message || 'Transaction failed',
+      error: e.reason || e.message || e.toString() || 'Transaction failed',
       code: e.code,
       data: e.data,
       rawError: e
