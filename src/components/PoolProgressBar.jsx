@@ -12,9 +12,10 @@ export default function PoolProgressBar({ current = 0, goal = 1000000 }) {
           className={styles.progressFill}
           style={{ width: `${pct}%`, transition: "width 700ms ease" }}
           aria-hidden="true"
-        />
-        <div className={styles.progressCenterAmount}>
-          {formatted} POL
+        >
+          <div className={styles.progressCenterAmountInside} style={{ left: `${Math.min(pct, 95)}%` }}>
+            {formatted} POL
+          </div>
         </div>
       </div>
 

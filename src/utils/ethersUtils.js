@@ -45,20 +45,34 @@ export async function buyTicket(signer) {
   try {
     const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
     
+    // First, check if the user has enough balance
+    const userBalance = await signer.provider.getBalance(await signer.getAddress());
+    const ticketPrice = ethers.parseEther("30"); // 30 POL
+    
+    if (userBalance < ticketPrice) {
+      throw new Error(`Insufficient balance. Need 30 POL but only have ${(Number(ethers.formatEther(userBalance))).toFixed(4)} POL`);
+    }
+    
     // Estimate gas first to avoid missing revert data issues
-    const gasEstimate = await contractWithSigner.buyTicket.estimateGas({ value: ethers.parseEther("30") });
+    const gasEstimate = await contractWithSigner.buyTicket.estimateGas({ value: ticketPrice });
     
     // Add some buffer to the gas estimate
-    const gasLimit = Math.floor(gasEstimate * 1.2); // 20% buffer
+    const gasLimit = Math.floor(gasEstimate * 1.3); // 30% buffer to be safe
     
     // Buy ticket with 30 POL payment and explicit gas limit
     const tx = await contractWithSigner.buyTicket({ 
-      value: ethers.parseEther("30"),
+      value: ticketPrice,
       gasLimit: gasLimit
     });
     
+    // Wait for transaction receipt
     const receipt = await tx.wait();
-    return { success: true, transaction: tx, receipt };
+    
+    if (receipt.status === 1) { // Success
+      return { success: true, transaction: tx, receipt };
+    } else { // Failed
+      throw new Error('Transaction failed: Receipt status is 0');
+    }
   } catch (e) {
     console.error('buyTicket error', e);
     // Provide more detailed error information
@@ -66,7 +80,8 @@ export async function buyTicket(signer) {
       success: false, 
       error: e.reason || e.message || 'Transaction failed',
       code: e.code,
-      data: e.data
+      data: e.data,
+      rawError: e
     };
   }
 }
