@@ -79,6 +79,9 @@ export default function WalletConnect({ onConnect }) {
         // User rejected the request
         console.log("User denied account access");
         alert("Connection was cancelled by the user.");
+      } else if (error.code === -32002) {
+        // Error when trying to connect while another connection request is pending
+        alert("A connection request is already pending. Please check your wallet extension.");
       } else {
         alert(`Wallet connection failed: ${error.message || 'No active wallet found'}`);
       }

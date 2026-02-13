@@ -47,7 +47,7 @@ export const CONTRACT_ABI = [
     ],
     "name": "buyTicket",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   }
 ];
