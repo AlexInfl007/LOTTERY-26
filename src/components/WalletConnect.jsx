@@ -258,7 +258,22 @@ export default function WalletConnect({ onConnect }) {
       
       // Test the provider by making a simple call to ensure it's working
       try {
+        // Test basic provider functionality
         await provider.getCode('0x0000000000000000000000000000000000000000');
+        
+        // Additional test for eth_newFilter which was causing issues
+        try {
+          // Create a simple filter to test if this method is available
+          const filter = await provider.send('eth_newFilter', [{
+            fromBlock: 'latest',
+            toBlock: 'latest'
+          }]);
+          // If successful, we can remove the filter immediately
+          await provider.send('eth_uninstallFilter', [filter]);
+        } catch (filterTestError) {
+          console.warn("Filter functionality test failed:", filterTestError);
+          // Continue anyway as some wallets may have restricted filter methods
+        }
       } catch (testError) {
         console.warn("Provider test failed, but continuing with connection:", testError);
       }
