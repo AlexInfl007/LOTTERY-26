@@ -28,13 +28,32 @@ export function getCurrentContract() {
 export async function readPrizePool() {
   try {
     const currentContract = getCurrentContract();
-    const raw = await currentContract.prizePool();
+    
+    // Try using callStatic instead of direct contract call to avoid filter issues
+    const raw = await currentContract.callStatic.prizePool();
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
   } catch (e) {
     console.error('readPrizePool error', e);
-    return 0;
+    
+    // Try fallback approach using provider directly
+    try {
+      const contractInterface = new ethers.Interface(CONTRACT_ABI);
+      const data = contractInterface.encodeFunctionData("prizePool");
+      
+      const result = await provider.call({
+        to: CONTRACT_ADDRESS,
+        data: data
+      });
+      
+      const decoded = contractInterface.decodeFunctionResult("prizePool", result);
+      const formatted = Number(ethers.formatEther(decoded[0] || 0));
+      return formatted;
+    } catch (fallbackError) {
+      console.error('readPrizePool fallback error', fallbackError);
+      return 0;
+    }
   }
 }
 
@@ -51,11 +70,45 @@ export function watchTicketEvents(onEvent) {
   };
 
   // Listen on the contract for TicketBought events
-  currentContract.on('TicketBought', handler);
+  try {
+    currentContract.on('TicketBought', handler);
+  } catch (e) {
+    console.error('Error setting up event listener:', e);
+    // Alternative approach using provider directly if .on() fails
+    try {
+      const filter = {
+        address: CONTRACT_ADDRESS,
+        topics: [
+          ethers.id('TicketBought(address,uint256)')
+        ]
+      };
+      provider.on(filter, (log) => {
+        try {
+          const contractInterface = new ethers.Interface(CONTRACT_ABI);
+          const parsedLog = contractInterface.parseLog(log);
+          if (parsedLog && parsedLog.args) {
+            const buyer = parsedLog.args[0];
+            const round = parsedLog.args[1];
+            const msg = `${buyer} купил билет (round #${round?.toString?.() ?? ''})`;
+            onEvent(msg);
+          }
+        } catch (parseErr) {
+          console.error('Error parsing log:', parseErr);
+        }
+      });
+    } catch (altError) {
+      console.error('Alternative event listening also failed:', altError);
+    }
+  }
 
   // return unsubscribe
   return () => {
-    currentContract.off('TicketBought', handler);
+    try {
+      currentContract.off('TicketBought', handler);
+    } catch (e) {
+      // If off() fails, try alternative cleanup
+      provider.removeAllListeners();
+    }
   };
 }
 
@@ -77,11 +130,46 @@ export function watchPrizePoolUpdates(onUpdate) {
     }
   };
 
-  currentContract.on('TicketBought', handler);
+  try {
+    currentContract.on('TicketBought', handler);
+  } catch (e) {
+    console.error('Error setting up prize pool event listener:', e);
+    // Alternative approach if .on() fails
+    try {
+      const filter = {
+        address: CONTRACT_ADDRESS,
+        topics: [
+          ethers.id('TicketBought(address,uint256)')
+        ]
+      };
+      provider.on(filter, (log) => {
+        try {
+          const contractInterface = new ethers.Interface(CONTRACT_ABI);
+          const parsedLog = contractInterface.parseLog(log);
+          if (parsedLog && parsedLog.args) {
+            readPrizePool().then(poolAmount => {
+              onUpdate(poolAmount);
+            }).catch(err => {
+              console.error('Error reading prize pool after ticket purchase:', err);
+            });
+          }
+        } catch (parseErr) {
+          console.error('Error parsing log for prize pool update:', parseErr);
+        }
+      });
+    } catch (altError) {
+      console.error('Alternative prize pool event listening also failed:', altError);
+    }
+  }
 
   // return unsubscribe
   return () => {
-    currentContract.off('TicketBought', handler);
+    try {
+      currentContract.off('TicketBought', handler);
+    } catch (e) {
+      // If off() fails, try alternative cleanup
+      provider.removeAllListeners();
+    }
   };
 }
 
