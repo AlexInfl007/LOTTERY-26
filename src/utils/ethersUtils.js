@@ -124,7 +124,78 @@ export function watchTicketEvents(onEvent) {
       currentContract.off('TicketBought', handler);
     } catch (e) {
       // If off() fails, try alternative cleanup
-      provider.removeAllListeners();
+      try {
+        provider.removeListener({address: CONTRACT_ADDRESS, topics: [ethers.id('TicketBought(address,uint256)')]});
+      } catch {
+        // Last resort cleanup
+        provider.removeAllListeners();
+      }
+    }
+  };
+}
+
+// Subscribe to WinnerSelected events to keep track of winners
+export function watchWinnerEvents(onWinner) {
+  const currentContract = getContractInstance();
+  const handler = (winner, round) => {
+    try {
+      const winnerData = {
+        address: winner,
+        round: parseInt(round?.toString?.() ?? '0')
+      };
+      onWinner(winnerData);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Listen on the contract for WinnerSelected events
+  try {
+    currentContract.on('WinnerSelected', handler);
+  } catch (e) {
+    console.error('Error setting up WinnerSelected event listener:', e);
+    // Alternative approach using provider directly if .on() fails
+    try {
+      const filter = {
+        address: CONTRACT_ADDRESS,
+        topics: [
+          ethers.id('WinnerSelected(address,uint256)')
+        ]
+      };
+      provider.on(filter, (log) => {
+        try {
+          const contractInterface = new ethers.Interface(CONTRACT_ABI);
+          const parsedLog = contractInterface.parseLog(log);
+          if (parsedLog && parsedLog.args) {
+            const winner = parsedLog.args[0];
+            const round = parsedLog.args[1];
+            const winnerData = {
+              address: winner,
+              round: parseInt(round?.toString?.() ?? '0')
+            };
+            onWinner(winnerData);
+          }
+        } catch (parseErr) {
+          console.error('Error parsing WinnerSelected log:', parseErr);
+        }
+      });
+    } catch (altError) {
+      console.error('Alternative WinnerSelected event listening also failed:', altError);
+    }
+  }
+
+  // return unsubscribe
+  return () => {
+    try {
+      currentContract.off('WinnerSelected', handler);
+    } catch (e) {
+      // If off() fails, try alternative cleanup
+      try {
+        provider.removeListener({address: CONTRACT_ADDRESS, topics: [ethers.id('WinnerSelected(address,uint256)')]});
+      } catch {
+        // Last resort cleanup
+        provider.removeAllListeners();
+      }
     }
   };
 }
@@ -242,10 +313,36 @@ export async function getUserTickets(walletAddress) {
   return 0;
 }
 
-// Function to get recent winners (this would need to be implemented based on the actual contract)
+// Function to get recent winners by querying the blockchain for WinnerSelected events
 export async function getRecentWinners() {
-  // This would need to be implemented based on the actual contract structure
-  // For now, returning a mock implementation
-  // Since the contract doesn't have a function to get winners, return empty array
-  return [];
+  try {
+    const currentContract = getContractInstance();
+    
+    // Get the last blocks to find recent winner events
+    const latestBlock = await provider.getBlockNumber();
+    const fromBlock = Math.max(latestBlock - 10000, 0); // Look back at most 10k blocks
+    
+    // Query for WinnerSelected events
+    const filter = currentContract.filters.WinnerSelected;
+    const events = await currentContract.queryFilter(filter, fromBlock);
+    
+    // Process the events to extract winner information
+    const winners = events.map(event => {
+      if (event.args) {
+        return {
+          address: event.args[0] || event.args.winner,
+          round: parseInt(event.args[1] || event.args.round || 0),
+          timestamp: event.blockNumber // Using block number as proxy; could fetch actual timestamp if needed
+        };
+      }
+      return null;
+    }).filter(Boolean).reverse(); // Reverse to show most recent first
+    
+    // If no WinnerSelected events found, return empty array
+    return winners;
+  } catch (error) {
+    console.error('getRecentWinners error:', error);
+    // Return empty array as fallback if there's an error
+    return [];
+  }
 }
