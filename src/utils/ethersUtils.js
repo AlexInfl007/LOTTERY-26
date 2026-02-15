@@ -54,6 +54,18 @@ export async function readPrizePool() {
   } catch (e) {
     console.error('readPrizePool error', e);
     
+    // Additional fallback to handle missing methods
+    try {
+      // Check if getPoolBalance exists as an alternative
+      if (typeof currentContract.getPoolBalance !== 'undefined') {
+        const raw = await currentContract.callStatic.getPoolBalance();
+        const formatted = Number(ethers.formatEther(raw || 0));
+        return formatted;
+      }
+    } catch (altError) {
+      console.error('getPoolBalance also failed', altError);
+    }
+    
     // Try fallback approach using provider directly
     try {
       const contractInterface = new ethers.Interface(CONTRACT_ABI);
@@ -63,6 +75,11 @@ export async function readPrizePool() {
         to: CONTRACT_ADDRESS,
         data: data
       });
+      
+      if (result === '0x') {
+        console.warn('Received empty result from contract call');
+        return 0;
+      }
       
       const decoded = contractInterface.decodeFunctionResult("prizePool", result);
       const formatted = Number(ethers.formatEther(decoded[0] || 0));
@@ -320,7 +337,8 @@ export async function getRecentWinners() {
     
     // Get the last blocks to find recent winner events
     const latestBlock = await provider.getBlockNumber();
-    const fromBlock = Math.max(latestBlock - 10000, 0); // Look back at most 10k blocks
+    // Reduce the block range to avoid "Block range is too large" error
+    const fromBlock = Math.max(latestBlock - 5000, 0); // Look back at most 5k blocks instead of 10k
     
     // Query for WinnerSelected events
     const filter = currentContract.filters.WinnerSelected;
