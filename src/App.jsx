@@ -39,10 +39,15 @@ export default function App() {
         setWinners(recentWinners);
         
         // Set up event listener for ticket purchases
-        const unsubscribe = watchTicketEvents((eventMessage) => {
+        const unsubscribeTicket = watchTicketEvents((eventMessage) => {
           setFeed(prev => [eventMessage, ...prev].slice(0,15));
           // Also increment tickets bought counter when we receive a ticket purchase event
           setTicketsBought(t => t + 1);
+        });
+        
+        // Set up event listener for winner selections
+        const unsubscribeWinner = watchWinnerEvents((winnerData) => {
+          setWinners(prev => [winnerData, ...prev].slice(0, 15));
         });
         
         // Set up event listener for prize pool updates
@@ -52,7 +57,8 @@ export default function App() {
         
         // Cleanup subscriptions
         return () => {
-          unsubscribe();
+          unsubscribeTicket();
+          unsubscribeWinner();
           poolUnsubscribe();
         };
       } catch (error) {
