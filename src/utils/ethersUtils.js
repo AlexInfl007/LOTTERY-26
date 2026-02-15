@@ -20,6 +20,17 @@ export function getContractInstance(customProvider = null) {
   return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, activeProvider);
 }
 
+// Function to update contract instance when provider changes
+export function updateContractInstance(newProvider) {
+  if (!newProvider) {
+    console.warn("updateContractInstance called with null/undefined provider");
+    return;
+  }
+  
+  provider = newProvider;
+  contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+}
+
 // Function to get the current provider
 export function getCurrentProvider() {
   return provider;

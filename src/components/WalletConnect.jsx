@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { ethers } from 'ethers';
-import { updateProvider } from '../utils/ethersUtils';
+import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
 
 // Helper function to detect all available providers
 function getAllProviders() {
@@ -267,8 +267,9 @@ export default function WalletConnect({ onConnect }) {
         console.warn("Provider test failed, but continuing with connection:", testError);
       }
       
-      // Update global provider with the user's provider
+      // Update global provider and contract instance with the user's provider
       updateProvider(provider);
+      updateContractInstance(provider);
       
       // Pass the connection details to the parent component
       onConnect && onConnect(accounts[0], provider, signer);
