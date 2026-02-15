@@ -110,7 +110,7 @@ export default function App() {
     try {
       setLoading(true);
       
-      // Buy ticket via smart contract
+      // Buy ticket via smart contract - using 30 POL as ticket price
       const result = await buyTicket(signer);
       
       if (result.success) {
@@ -118,7 +118,7 @@ export default function App() {
         setMyTickets(t => t + 1);
         // Don't update tickets/pool immediately - wait for the blockchain event
         // The event listener will update these values when the transaction is confirmed
-        setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
+        setFeed(prev => [`You participated in the lottery`, ...prev].slice(0,15));
       } else {
         console.error("Transaction failed:", result.error);
         alert(`Transaction failed: ${result.error}`);

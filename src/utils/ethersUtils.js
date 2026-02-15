@@ -47,7 +47,7 @@ export async function readPrizePool() {
     const currentContract = getContractInstance();
     
     // Try using callStatic instead of direct contract call to avoid filter issues
-    const raw = await currentContract.callStatic.prizePool();
+    const raw = await currentContract.callStatic.getPoolBalance();
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
@@ -57,14 +57,14 @@ export async function readPrizePool() {
     // Try fallback approach using provider directly
     try {
       const contractInterface = new ethers.Interface(CONTRACT_ABI);
-      const data = contractInterface.encodeFunctionData("prizePool");
+      const data = contractInterface.encodeFunctionData("getPoolBalance");
       
       const result = await provider.call({
         to: CONTRACT_ADDRESS,
         data: data
       });
       
-      const decoded = contractInterface.decodeFunctionResult("prizePool", result);
+      const decoded = contractInterface.decodeFunctionResult("getPoolBalance", result);
       const formatted = Number(ethers.formatEther(decoded[0] || 0));
       return formatted;
     } catch (fallbackError) {
@@ -305,12 +305,16 @@ export async function buyTicket(signer) {
   }
 }
 
-// Function to get connected wallet's tickets
+// Function to check if user has entered the lottery
 export async function getUserTickets(walletAddress) {
-  // This would need to be implemented based on the actual contract structure
-  // For now, returning a mock implementation
-  // Since the contract doesn't have a function to get user tickets, return 0
-  return 0;
+  try {
+    const currentContract = getContractInstance();
+    const hasEntered = await currentContract.hasEntered(walletAddress);
+    return hasEntered ? 1 : 0; // Return 1 if user has entered, 0 otherwise
+  } catch (e) {
+    console.error('getUserTickets error', e);
+    return 0;
+  }
 }
 
 // Function to get recent winners by querying the blockchain for WinnerSelected events
