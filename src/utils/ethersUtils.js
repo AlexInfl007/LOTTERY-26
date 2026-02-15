@@ -5,13 +5,30 @@ import { ethers } from 'ethers';
 const DEFAULT_RPC = 'https://polygon-rpc.com'; // бесплатный публичный RPC
 
 // provider можно заменить пользователем при желании
-const provider = new ethers.JsonRpcProvider(DEFAULT_RPC);
-const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+let provider = new ethers.JsonRpcProvider(DEFAULT_RPC);
+let contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+
+// Function to update provider when user connects their wallet
+export function updateProvider(newProvider) {
+  provider = newProvider;
+  contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+}
+
+// Function to get the current provider
+export function getCurrentProvider() {
+  return provider;
+}
+
+// Function to get the current contract
+export function getCurrentContract() {
+  return contract;
+}
 
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
 export async function readPrizePool() {
   try {
-    const raw = await contract.prizePool();
+    const currentContract = getCurrentContract();
+    const raw = await currentContract.prizePool();
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
@@ -23,6 +40,7 @@ export async function readPrizePool() {
 
 // subscribe to TicketBought events -> calls callback with readable message
 export function watchTicketEvents(onEvent) {
+  const currentContract = getCurrentContract();
   const handler = (buyer, round) => {
     try {
       const msg = `${buyer} купил билет (round #${round?.toString?.() ?? ''})`;
@@ -33,16 +51,17 @@ export function watchTicketEvents(onEvent) {
   };
 
   // Listen on the contract for TicketBought events
-  contract.on('TicketBought', handler);
+  currentContract.on('TicketBought', handler);
 
   // return unsubscribe
   return () => {
-    contract.off('TicketBought', handler);
+    currentContract.off('TicketBought', handler);
   };
 }
 
 // Subscribe to PrizePool updates to keep track of the pool amount
 export function watchPrizePoolUpdates(onUpdate) {
+  const currentContract = getCurrentContract();
   // Since we don't have a specific event for prize pool updates, we'll monitor
   // the TicketBought event which affects the pool, and also provide a way to manually refresh
   const handler = (buyer, round) => {
@@ -58,11 +77,11 @@ export function watchPrizePoolUpdates(onUpdate) {
     }
   };
 
-  contract.on('TicketBought', handler);
+  currentContract.on('TicketBought', handler);
 
   // return unsubscribe
   return () => {
-    contract.off('TicketBought', handler);
+    currentContract.off('TicketBought', handler);
   };
 }
 
