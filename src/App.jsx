@@ -46,9 +46,11 @@ export default function App() {
         });
         
         // Set up event listener for winner selections
-        const unsubscribeWinner = watchWinnerEvents((winnerData) => {
-          setWinners(prev => [winnerData, ...prev].slice(0, 15));
-        });
+        const unsubscribeWinner = watchWinnerEvents && typeof watchWinnerEvents === 'function' 
+          ? watchWinnerEvents((winnerData) => {
+              setWinners(prev => [winnerData, ...prev].slice(0, 15));
+            })
+          : () => {};
         
         // Set up event listener for prize pool updates
         const poolUnsubscribe = watchPrizePoolUpdates((updatedPool) => {
