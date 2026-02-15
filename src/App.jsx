@@ -10,7 +10,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates, getRecentWinners } from "./utils/ethersUtils";
 import { ethers } from 'ethers';
 
 export default function App() {
@@ -21,6 +21,7 @@ export default function App() {
   const [ticketsBought, setTicketsBought] = useState(0); // Initialize as 0, will be updated from contract
   const [myTickets, setMyTickets] = useState(0); // Initialize as 0, will be updated from contract
   const [feed, setFeed] = useState([]);
+  const [winners, setWinners] = useState([]); // Initialize winners state
   const [walletAddress, setWalletAddress] = useState(null);
   const [signer, setSigner] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,10 @@ export default function App() {
         // Get initial pool amount from contract
         const initialPool = await readPrizePool();
         setPoolAmount(initialPool);
+        
+        // Get recent winners from contract
+        const recentWinners = await getRecentWinners();
+        setWinners(recentWinners);
         
         // Set up event listener for ticket purchases
         const unsubscribe = watchTicketEvents((eventMessage) => {
@@ -185,7 +190,7 @@ export default function App() {
         </div>
 
         <div className={styles.rightColumn}>
-          <Winners winners={[]} />
+          <Winners winners={winners} />
 
           <div className={styles.sideCard}>
             <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>

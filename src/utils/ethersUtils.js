@@ -14,6 +14,12 @@ export function updateProvider(newProvider) {
   contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 }
 
+// Function to get contract instance with fallback
+export function getContractInstance(customProvider = null) {
+  const activeProvider = customProvider || provider;
+  return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, activeProvider);
+}
+
 // Function to get the current provider
 export function getCurrentProvider() {
   return provider;
@@ -27,7 +33,7 @@ export function getCurrentContract() {
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
 export async function readPrizePool() {
   try {
-    const currentContract = getCurrentContract();
+    const currentContract = getContractInstance();
     
     // Try using callStatic instead of direct contract call to avoid filter issues
     const raw = await currentContract.callStatic.prizePool();
@@ -59,7 +65,7 @@ export async function readPrizePool() {
 
 // subscribe to TicketBought events -> calls callback with readable message
 export function watchTicketEvents(onEvent) {
-  const currentContract = getCurrentContract();
+  const currentContract = getContractInstance();
   const handler = (buyer, round) => {
     try {
       const msg = `${buyer} купил билет (round #${round?.toString?.() ?? ''})`;
@@ -114,7 +120,7 @@ export function watchTicketEvents(onEvent) {
 
 // Subscribe to PrizePool updates to keep track of the pool amount
 export function watchPrizePoolUpdates(onUpdate) {
-  const currentContract = getCurrentContract();
+  const currentContract = getContractInstance();
   // Since we don't have a specific event for prize pool updates, we'll monitor
   // the TicketBought event which affects the pool, and also provide a way to manually refresh
   const handler = (buyer, round) => {
@@ -221,5 +227,14 @@ export async function buyTicket(signer) {
 export async function getUserTickets(walletAddress) {
   // This would need to be implemented based on the actual contract structure
   // For now, returning a mock implementation
+  // Since the contract doesn't have a function to get user tickets, return 0
   return 0;
+}
+
+// Function to get recent winners (this would need to be implemented based on the actual contract)
+export async function getRecentWinners() {
+  // This would need to be implemented based on the actual contract structure
+  // For now, returning a mock implementation
+  // Since the contract doesn't have a function to get winners, return empty array
+  return [];
 }
