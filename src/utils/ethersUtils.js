@@ -5,8 +5,14 @@ import { ethers } from 'ethers';
 const DEFAULT_RPC = 'https://polygon-rpc.com'; // бесплатный публичный RPC
 
 // provider можно заменить пользователем при желании
-const provider = new ethers.JsonRpcProvider(DEFAULT_RPC);
-const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+let provider = new ethers.JsonRpcProvider(DEFAULT_RPC);
+let contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+
+// Function to update provider when user connects their wallet
+export function updateProvider(newProvider) {
+  provider = newProvider;
+  contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+}
 
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
 export async function readPrizePool() {
