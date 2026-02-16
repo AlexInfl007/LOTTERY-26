@@ -18,15 +18,9 @@ export default function LanguageSelector() {
   const [selectedLang, setSelectedLang] = useState(i18n.language || "en");
   const dropdownRef = useRef(null);
 
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const handleMouseLeave = () => {
+    setOpen(false);
+  };
 
   const handleLanguageChange = (code) => {
     i18n.changeLanguage(code);
@@ -38,7 +32,7 @@ export default function LanguageSelector() {
   const currentLanguage = languages.find((l) => l.code === selectedLang);
 
   return (
-    <div className={styles.langWrapper} ref={dropdownRef}>
+    <div className={styles.langWrapper} ref={dropdownRef} onMouseLeave={handleMouseLeave}>
       <button
         onClick={() => setOpen(!open)}
         className={styles.langButton}
@@ -51,7 +45,7 @@ export default function LanguageSelector() {
       </button>
 
       {open && (
-        <ul className={styles.langMenu} role="menu">
+        <ul className={styles.langMenu} role="menu" onMouseEnter={() => setOpen(true)} onMouseLeave={handleMouseLeave}>
           {languages.map((lang) => (
             <li
               key={lang.code}

@@ -210,7 +210,6 @@ export default function App() {
       <footer className={styles.footer}>
         <div className={styles.footerTop}>
           <div className={styles.footerLeft}>
-            <div className={styles.smallLogo}></div>
             <span>{t("footerNote", "Provable randomness powered by Chainlink VRF")}</span>
           </div>
           <div className={styles.footerRight}>
