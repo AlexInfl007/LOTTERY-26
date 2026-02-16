@@ -262,6 +262,13 @@ export default function WalletConnect({ onConnect }) {
     setCheckingWallet(true);
 
     try {
+      // Check if provider is responsive before proceeding
+      try {
+        await ethereum.request({ method: 'eth_chainId' });
+      } catch (e) {
+        throw new Error('Selected wallet provider is not responding. Please make sure your wallet is unlocked and ready.');
+      }
+
       // First, switch to Polygon network using the selected provider
       await switchToPolygonNetwork(ethereum);
       
@@ -313,7 +320,7 @@ export default function WalletConnect({ onConnect }) {
         if (error.code === -32002) {
           errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
         } else if (error.code === -32603) {
-          errorMessage = 'Internal error. Please make sure your wallet is properly installed and unlocked.';
+          errorMessage = 'Internal error. Please make sure your wallet is properly installed, unlocked, and the selected wallet is active.';
         } else if (error.code === -32075) {
           errorMessage = 'Method disabled. This may be due to browser restrictions or wallet configuration.';
         } else if (errorMessage.includes('network')) {
@@ -322,6 +329,8 @@ export default function WalletConnect({ onConnect }) {
           errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
         } else if (errorMessage.includes('invalid json rpc')) {
           errorMessage = 'Invalid JSON-RPC response. Make sure your wallet is unlocked and properly configured.';
+        } else if (errorMessage.includes('No active wallet found')) {
+          errorMessage = 'No active wallet found. Please make sure your wallet is unlocked and ready before connecting.';
         }
         
         alert(`Wallet connection failed: ${errorMessage}`);
