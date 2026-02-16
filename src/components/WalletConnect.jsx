@@ -27,6 +27,25 @@ function getAllProviders() {
   return [];
 }
 
+// Enhanced function to wait for Ethereum provider with timeout
+const waitForEthereum = async (timeout = 5000) => {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeout) {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      // Check if providers are available
+      if (window.ethereum.providers && window.ethereum.providers.length > 0) {
+        return window.ethereum.providers;
+      }
+      if (window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet || window.ethereum.request) {
+        return [window.ethereum];
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return [];
+};
+
 // Helper function to detect the preferred provider among multiple wallets
 function getPreferredProvider() {
   if (typeof window === 'undefined') {
@@ -121,13 +140,20 @@ export default function WalletConnect({ onConnect }) {
   // Detect available wallets on component mount
   useEffect(() => {
     const detectWallets = async () => {
-      // Wait a bit for wallet extensions to initialize
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // More robust waiting for wallet extensions to initialize
+      const providers = await waitForEthereum(5000); // Wait up to 5 seconds
       
-      const providers = getAllProviders();
       const detectedWallets = [];
       
       for (const provider of providers) {
+        // Try to verify that the provider is responsive
+        try {
+          await provider.request({ method: 'eth_chainId' });
+        } catch (e) {
+          console.log('Provider not responding:', e);
+          continue; // Skip unresponsive providers
+        }
+        
         if (provider.isMetaMask) {
           detectedWallets.push({ id: 'metamask', name: 'MetaMask', provider });
         } else if (provider.isCoinbaseWallet) {
@@ -236,8 +262,15 @@ export default function WalletConnect({ onConnect }) {
     setCheckingWallet(true);
 
     try {
-      // First, switch to Polygon network
-      await switchToPolygonNetwork();
+      // Check if provider is responsive before proceeding
+      try {
+        await ethereum.request({ method: 'eth_chainId' });
+      } catch (e) {
+        throw new Error('Selected wallet provider is not responding. Please make sure your wallet is unlocked and ready.');
+      }
+
+      // First, switch to Polygon network using the selected provider
+      await switchToPolygonNetwork(ethereum);
       
       // Request account access
       const accounts = await ethereum.request({ 
@@ -287,7 +320,7 @@ export default function WalletConnect({ onConnect }) {
         if (error.code === -32002) {
           errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
         } else if (error.code === -32603) {
-          errorMessage = 'Internal error. Please make sure your wallet is properly installed and unlocked.';
+          errorMessage = 'Internal error. Please make sure your wallet is properly installed, unlocked, and the selected wallet is active.';
         } else if (error.code === -32075) {
           errorMessage = 'Method disabled. This may be due to browser restrictions or wallet configuration.';
         } else if (errorMessage.includes('network')) {
@@ -296,6 +329,8 @@ export default function WalletConnect({ onConnect }) {
           errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
         } else if (errorMessage.includes('invalid json rpc')) {
           errorMessage = 'Invalid JSON-RPC response. Make sure your wallet is unlocked and properly configured.';
+        } else if (errorMessage.includes('No active wallet found')) {
+          errorMessage = 'No active wallet found. Please make sure your wallet is unlocked and ready before connecting.';
         }
         
         alert(`Wallet connection failed: ${errorMessage}`);
@@ -306,7 +341,7 @@ export default function WalletConnect({ onConnect }) {
     }
   };
 
-  const switchToPolygonNetwork = async () => {
+  const switchToPolygonNetwork = async (ethereumProvider) => {
     const polygonChainParams = {
       chainId: '0x89', // 137 in decimal
       chainName: 'Polygon Mainnet',
@@ -320,8 +355,8 @@ export default function WalletConnect({ onConnect }) {
     };
 
     try {
-      // Try to switch to Polygon network
-      await window.ethereum.request({
+      // Try to switch to Polygon network using the passed provider
+      await ethereumProvider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: polygonChainParams.chainId }],
       });
@@ -329,8 +364,8 @@ export default function WalletConnect({ onConnect }) {
       // This error code indicates that the chain is not added to MetaMask
       if (switchError.code === 4902) {
         try {
-          // Add the Polygon network to the wallet
-          await window.ethereum.request({
+          // Add the Polygon network to the wallet using the passed provider
+          await ethereumProvider.request({
             method: 'wallet_addEthereumChain',
             params: [polygonChainParams],
           });
