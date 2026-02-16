@@ -4,7 +4,35 @@ import { useTranslation } from "react-i18next";
 import { ethers } from 'ethers';
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
 
-// Helper function to detect all available providers
+// Universal function to detect Ethereum provider across all platforms
+function getEthereumProvider() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // Check for injected provider (works on PC and mobile browsers)
+  if (window.ethereum) {
+    // Multiple providers case (like when multiple wallets are installed)
+    if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
+      // Return the first provider, or prioritize based on preference
+      for (const provider of window.ethereum.providers) {
+        if (provider.isMetaMask) return provider;
+      }
+      return window.ethereum.providers[0];
+    }
+    // Single provider case
+    return window.ethereum;
+  }
+
+  // Check for other common injection patterns
+  if (window.web3?.currentProvider) {
+    return window.web3.currentProvider;
+  }
+
+  return null;
+}
+
+// Universal function to detect all available providers
 function getAllProviders() {
   if (typeof window === 'undefined') {
     return [];
@@ -27,7 +55,7 @@ function getAllProviders() {
   return [];
 }
 
-// Helper function to detect the preferred provider among multiple wallets
+// Enhanced function to detect the preferred provider among multiple wallets
 function getPreferredProvider() {
   if (typeof window === 'undefined') {
     return null;
@@ -57,6 +85,10 @@ function getPreferredProvider() {
       if (provider.isTokenary) return provider;
       if (provider.isAvalanche) return provider;
       if (provider.isBitKeep) return provider;
+      if (provider.isRabby) return provider;
+      if (provider.isOkxWallet) return provider;
+      if (provider.isBinance) return provider;
+      if (provider.isPhantom) return provider;
     }
     
     // Fallback to first available provider
@@ -68,34 +100,55 @@ function getPreferredProvider() {
   if (window.ethereum.isCoinbaseWallet) return window.ethereum;
   if (window.ethereum.isTrustWallet) return window.ethereum;
   if (window.ethereum.isBraveWallet) return window.ethereum;
+  if (window.ethereum.isRabby) return window.ethereum;
+  if (window.ethereum.isOkxWallet) return window.ethereum;
+  if (window.ethereum.isBinance) return window.ethereum;
+  if (window.ethereum.isPhantom) return window.ethereum;
   
   // Fallback to default provider
   return window.ethereum;
 }
 
-// Function to wait for wallet to be ready
-async function waitForWalletReady() {
-  return new Promise((resolve) => {
-    if (window.ethereum && window.ethereum.isMetaMask) {
-      resolve();
-    } else if (window.ethereum && window.ethereum.providers) {
-      resolve();
+// Universal function to request accounts from any wallet
+async function requestAccounts(provider) {
+  if (!provider) {
+    throw new Error("No provider available");
+  }
+
+  // Modern approach: use eth_requestAccounts
+  if (provider.request) {
+    return await provider.request({
+      method: "eth_requestAccounts"
+    });
+  } else if (provider.enable) {
+    // Legacy approach for older providers
+    return await provider.enable();
+  } else {
+    // Fallback to direct method call
+    if (typeof provider.sendAsync === 'function') {
+      return new Promise((resolve, reject) => {
+        provider.sendAsync({
+          method: 'eth_requestAccounts',
+          params: [],
+          id: Date.now()
+        }, (err, result) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(result.result);
+          }
+        });
+      });
+    } else if (typeof provider.send === 'function') {
+      const response = await provider.send('eth_requestAccounts');
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+      return response.result;
     } else {
-      // Wait for wallet to become available
-      let attempts = 0;
-      const checkWallet = () => {
-        attempts++;
-        if (window.ethereum && (window.ethereum.isMetaMask || window.ethereum.providers)) {
-          resolve();
-        } else if (attempts < 10) {
-          setTimeout(checkWallet, 200);
-        } else {
-          resolve();
-        }
-      };
-      checkWallet();
+      throw new Error("Provider does not support account requests");
     }
-  });
+  }
 }
 
 export default function WalletConnect({ onConnect }) {
@@ -183,8 +236,8 @@ export default function WalletConnect({ onConnect }) {
     // Wait a bit to ensure any wallet extensions have loaded
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    // Use our improved provider detection function
-    const ethereum = getPreferredProvider();
+    // Use our universal provider detection function
+    const ethereum = getEthereumProvider() || getPreferredProvider();
     
     // If no injected wallet found, try to guide user appropriately
     if (!ethereum) {
@@ -239,10 +292,8 @@ export default function WalletConnect({ onConnect }) {
       // First, switch to Polygon network
       await switchToPolygonNetwork();
       
-      // Request account access
-      const accounts = await ethereum.request({ 
-        method: "eth_requestAccounts" 
-      });
+      // Use the universal request accounts function
+      const accounts = await requestAccounts(ethereum);
       
       // Check if we got valid accounts
       if (!accounts || accounts.length === 0) {
