@@ -15,7 +15,7 @@ const languages = [
 
 export default function LanguageSelector() {
   const [open, setOpen] = useState(false);
-  const [selectedLang, setSelectedLang] = useState(i18n.language || "en");
+  const [selectedLang, setSelectedLang] = useState("en");
   const dropdownRef = useRef(null);
 
   const handleMouseLeave = () => {
