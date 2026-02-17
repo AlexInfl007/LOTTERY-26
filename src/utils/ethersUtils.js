@@ -141,7 +141,7 @@ export async function watchTicketEvents(onEvent) {
           ethers.id('TicketBought(address,uint256)')
         ]
       };
-      provider.on(filter, (log) => {
+      provider.on(filter, async (log) => {
         try {
           // Dynamically import the contract ABI for parsing
           const contractModule = await import('./contract');
@@ -215,7 +215,7 @@ export async function watchWinnerEvents(onWinner) {
           ethers.id('WinnerSelected(address,uint256)')
         ]
       };
-      provider.on(filter, (log) => {
+      provider.on(filter, async (log) => {
         try {
           // Dynamically import the contract ABI for parsing
           const contractModule = await import('./contract');
