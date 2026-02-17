@@ -654,6 +654,26 @@
 }
 
 /* winners list */
+.winnersList {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.winnersList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.winnersList::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 3px;
+}
+
+.winnersList::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 3px;
+}
+
 .winnerRow {
   display: flex;
   justify-content: space-between;
