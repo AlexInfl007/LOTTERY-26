@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { getProvider } from './ethersUtils';
+import { getProvider } from '../src/utils/ethersUtils';
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../src/utils/contract';
 
 // ABI контракта
