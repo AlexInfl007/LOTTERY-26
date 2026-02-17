@@ -1,6 +1,5 @@
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from './contract';
 import { ethers } from 'ethers';
-import { getContractAsync } from '../../utils/contractManager';
+import { getContractAsync, getContract, initializeContract } from '../../utils/contractManager';
 
 // public RPC (free)
 const DEFAULT_RPC = 'https://polygon-rpc.com'; // бесплатный публичный RPC
@@ -18,6 +17,8 @@ export function updateProvider(newProvider) {
 // Function to get contract instance with fallback
 export async function getContractInstance(customProvider = null) {
   if (customProvider) {
+    // Import ABI and address locally when custom provider is used
+    const { CONTRACT_ABI, CONTRACT_ADDRESS } = await import('./contract');
     return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, customProvider);
   }
   
@@ -83,11 +84,13 @@ export async function readPrizePool() {
     
     // Try fallback approach using provider directly
     try {
-      const contractInterface = new ethers.Interface(CONTRACT_ABI);
+      // Dynamically import the contract ABI and address for fallback
+      const contractModule = await import('./contract');
+      const contractInterface = new ethers.Interface(contractModule.CONTRACT_ABI);
       const data = contractInterface.encodeFunctionData("prizePool");
       
       const result = await provider.call({
-        to: CONTRACT_ADDRESS,
+        to: contractModule.CONTRACT_ADDRESS,
         data: data
       });
       
@@ -130,15 +133,19 @@ export async function watchTicketEvents(onEvent) {
     console.error('Error setting up event listener:', e);
     // Alternative approach using provider directly if .on() fails
     try {
+      // Dynamically import the contract address for the filter
+      const contractModule = await import('./contract');
       const filter = {
-        address: CONTRACT_ADDRESS,
+        address: contractModule.CONTRACT_ADDRESS,
         topics: [
           ethers.id('TicketBought(address,uint256)')
         ]
       };
       provider.on(filter, (log) => {
         try {
-          const contractInterface = new ethers.Interface(CONTRACT_ABI);
+          // Dynamically import the contract ABI for parsing
+          const contractModule = await import('./contract');
+          const contractInterface = new ethers.Interface(contractModule.CONTRACT_ABI);
           const parsedLog = contractInterface.parseLog(log);
           if (parsedLog && parsedLog.args) {
             const buyer = parsedLog.args[0];
@@ -162,7 +169,9 @@ export async function watchTicketEvents(onEvent) {
     } catch (e) {
       // If off() fails, try alternative cleanup
       try {
-        provider.removeListener({address: CONTRACT_ADDRESS, topics: [ethers.id('TicketBought(address,uint256)')]});
+        // Dynamically import the contract address for cleanup
+        const contractModule = await import('./contract');
+        provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('TicketBought(address,uint256)')]});
       } catch {
         // Last resort cleanup
         provider.removeAllListeners();
@@ -198,15 +207,19 @@ export async function watchWinnerEvents(onWinner) {
     console.error('Error setting up WinnerSelected event listener:', e);
     // Alternative approach using provider directly if .on() fails
     try {
+      // Dynamically import the contract address for the filter
+      const contractModule = await import('./contract');
       const filter = {
-        address: CONTRACT_ADDRESS,
+        address: contractModule.CONTRACT_ADDRESS,
         topics: [
           ethers.id('WinnerSelected(address,uint256)')
         ]
       };
       provider.on(filter, (log) => {
         try {
-          const contractInterface = new ethers.Interface(CONTRACT_ABI);
+          // Dynamically import the contract ABI for parsing
+          const contractModule = await import('./contract');
+          const contractInterface = new ethers.Interface(contractModule.CONTRACT_ABI);
           const parsedLog = contractInterface.parseLog(log);
           if (parsedLog && parsedLog.args) {
             const winner = parsedLog.args[0];
@@ -233,7 +246,9 @@ export async function watchWinnerEvents(onWinner) {
     } catch (e) {
       // If off() fails, try alternative cleanup
       try {
-        provider.removeListener({address: CONTRACT_ADDRESS, topics: [ethers.id('WinnerSelected(address,uint256)')]});
+        // Dynamically import the contract address for cleanup
+        const contractModule = await import('./contract');
+        provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('WinnerSelected(address,uint256)')]});
       } catch {
         // Last resort cleanup
         provider.removeAllListeners();
