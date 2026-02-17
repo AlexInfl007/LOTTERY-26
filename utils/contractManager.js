@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { getProvider } from './ethersUtils';
+import { getCurrentProvider, getContractInstance } from '../src/utils/ethersUtils';
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../src/utils/contract';
 
 // ABI контракта
@@ -15,7 +15,7 @@ export const initializeContract = async (force = false) => {
   
   initializationPromise = new Promise(async (resolve) => {
     try {
-      const provider = getProvider();
+      const provider = getCurrentProvider();
       if (!provider) {
         console.warn('No provider available');
         resolve(null);
@@ -54,7 +54,7 @@ export const getContractAsync = async () => {
 
 export const getContractWithSigner = async () => {
   try {
-    const signer = await getProvider(true);
+    const signer = await getCurrentProvider(true);
     if (!signer) return null;
     
     return new ethers.Contract(
