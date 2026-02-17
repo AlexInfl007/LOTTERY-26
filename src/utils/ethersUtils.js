@@ -1,18 +1,45 @@
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from './contract';
 import { ethers } from 'ethers';
-import { getContractAsync } from '../../utils/contractManager';
+import { getContractAsync, reconnectProvider } from '../../utils/contractManager';
 
-// public RPC (free)
-const DEFAULT_RPC = 'https://polygon-rpc.com'; // бесплатный публичный RPC
+// Configuration constants
+const DEFAULT_RPC = 'https://polygon-rpc.com';
+const RPC_RETRY_ATTEMPTS = 3;
+const RPC_RETRY_DELAY = 2000; // ms
+const EVENT_LISTENER_RETRY_DELAY = 5000; // 5 seconds
+const PROVIDER_HEALTH_CHECK_TIMEOUT = 10000; // 10 seconds
 
-// provider можно заменить пользователем при желании
+// Internal state
 let provider = new ethers.JsonRpcProvider(DEFAULT_RPC);
 let contract = null; // Will be initialized via contractManager
+let activeSubscriptions = new Set(); // Track active subscriptions for cleanup
 
 // Function to update provider when user connects their wallet
-export function updateProvider(newProvider) {
-  provider = newProvider;
-  // Contract will be handled by contractManager
+export async function updateProvider(newProvider) {
+  if (!newProvider) {
+    console.warn("updateProvider called with null/undefined provider");
+    return;
+  }
+  
+  try {
+    // Test the new provider before switching
+    await Promise.race([
+      newProvider.getBlockNumber(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Provider health check timeout')), PROVIDER_HEALTH_CHECK_TIMEOUT)
+      )
+    ]);
+    
+    provider = newProvider;
+    
+    // Reconnect through contract manager to update both provider and contract
+    await reconnectProvider(newProvider);
+    
+    console.log('Provider updated successfully');
+  } catch (error) {
+    console.error('Failed to update provider, keeping original:', error);
+    // Keep the original provider if the new one fails
+  }
 }
 
 // Function to get contract instance with fallback
@@ -26,14 +53,14 @@ export async function getContractInstance(customProvider = null) {
 }
 
 // Function to update contract instance when provider changes
-export function updateContractInstance(newProvider) {
+export async function updateContractInstance(newProvider) {
   if (!newProvider) {
     console.warn("updateContractInstance called with null/undefined provider");
     return;
   }
   
-  provider = newProvider;
-  // Contract will be handled by contractManager
+  // Update provider and reconnect through contract manager
+  await updateProvider(newProvider);
 }
 
 // Function to get the current provider
@@ -46,13 +73,37 @@ export async function getCurrentContract() {
   return await getContractAsync();
 }
 
+// Helper function to retry RPC calls
+async function retryRPCOperation(operation, operationName, maxRetries = RPC_RETRY_ATTEMPTS) {
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempting ${operationName}, attempt ${attempt}/${maxRetries}`);
+      const result = await operation();
+      console.log(`${operationName} succeeded on attempt ${attempt}`);
+      return result;
+    } catch (error) {
+      console.error(`${operationName} failed on attempt ${attempt}:`, error.message);
+      lastError = error;
+      
+      // Don't delay on the last attempt
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, RPC_RETRY_DELAY));
+      }
+    }
+  }
+  
+  console.error(`${operationName} failed after ${maxRetries} attempts`);
+  throw lastError;
+}
+
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
 export async function readPrizePool() {
-  try {
+  return retryRPCOperation(async () => {
     const currentContract = await getContractInstance();
     if (!currentContract) {
-      console.error('Contract not initialized');
-      return 0;
+      throw new Error('Contract not initialized');
     }
     
     // Try using callStatic instead of direct contract call to avoid filter issues
@@ -60,55 +111,15 @@ export async function readPrizePool() {
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
-  } catch (e) {
-    console.error('readPrizePool error', e);
-    
-    // Additional fallback to handle missing methods
-    try {
-      const currentContract = await getContractInstance();
-      if (!currentContract) {
-        console.error('Contract not initialized for fallback');
-        return 0;
-      }
-      
-      // Check if getPoolBalance exists as an alternative
-      if (typeof currentContract.getPoolBalance !== 'undefined') {
-        const raw = await currentContract.callStatic.getPoolBalance();
-        const formatted = Number(ethers.formatEther(raw || 0));
-        return formatted;
-      }
-    } catch (altError) {
-      console.error('getPoolBalance also failed', altError);
-    }
-    
-    // Try fallback approach using provider directly
-    try {
-      const contractInterface = new ethers.Interface(CONTRACT_ABI);
-      const data = contractInterface.encodeFunctionData("prizePool");
-      
-      const result = await provider.call({
-        to: CONTRACT_ADDRESS,
-        data: data
-      });
-      
-      if (result === '0x') {
-        console.warn('Received empty result from contract call');
-        return 0;
-      }
-      
-      const decoded = contractInterface.decodeFunctionResult("prizePool", result);
-      const formatted = Number(ethers.formatEther(decoded[0] || 0));
-      return formatted;
-    } catch (fallbackError) {
-      console.error('readPrizePool fallback error', fallbackError);
-      return 0;
-    }
-  }
+  }, 'readPrizePool');
 }
 
 // subscribe to TicketBought events -> calls callback with readable message
 export async function watchTicketEvents(onEvent) {
-  const currentContract = await getContractInstance();
+  // Generate a unique ID for this subscription
+  const subscriptionId = `ticket_${Date.now()}_${Math.random()}`;
+  
+  let currentContract = await getContractInstance();
   if (!currentContract) {
     console.error('Contract not initialized for watchTicketEvents');
     return () => {}; // Return empty unsubscriber
@@ -119,61 +130,58 @@ export async function watchTicketEvents(onEvent) {
       const msg = `${buyer} купил билет (round #${round?.toString?.() ?? ''})`;
       onEvent(msg);
     } catch (err) {
-      console.error(err);
+      console.error('Error in ticket event handler:', err);
     }
   };
 
-  // Listen on the contract for TicketBought events
-  try {
-    currentContract.on('TicketBought', handler);
-  } catch (e) {
-    console.error('Error setting up event listener:', e);
-    // Alternative approach using provider directly if .on() fails
+  // Retry mechanism for setting up event listener
+  const setupListener = async () => {
     try {
-      const filter = {
-        address: CONTRACT_ADDRESS,
-        topics: [
-          ethers.id('TicketBought(address,uint256)')
-        ]
-      };
-      provider.on(filter, (log) => {
-        try {
-          const contractInterface = new ethers.Interface(CONTRACT_ABI);
-          const parsedLog = contractInterface.parseLog(log);
-          if (parsedLog && parsedLog.args) {
-            const buyer = parsedLog.args[0];
-            const round = parsedLog.args[1];
-            const msg = `${buyer} купил билет (round #${round?.toString?.() ?? ''})`;
-            onEvent(msg);
-          }
-        } catch (parseErr) {
-          console.error('Error parsing log:', parseErr);
-        }
-      });
-    } catch (altError) {
-      console.error('Alternative event listening also failed:', altError);
+      // Remove previous listener if it exists
+      currentContract.off('TicketBought', handler);
+      
+      // Get fresh contract instance
+      currentContract = await getContractInstance();
+      if (!currentContract) {
+        throw new Error('Contract not initialized for watchTicketEvents');
+      }
+      
+      // Listen on the contract for TicketBought events
+      currentContract.on('TicketBought', handler);
+      console.log('TicketBought event listener set up successfully');
+    } catch (e) {
+      console.error('Error setting up TicketBought event listener:', e);
+      // Retry after delay
+      setTimeout(setupListener, EVENT_LISTENER_RETRY_DELAY);
     }
-  }
+  };
+
+  // Initial setup
+  await setupListener();
+
+  // Add to active subscriptions tracking
+  activeSubscriptions.add(subscriptionId);
 
   // return unsubscribe
   return () => {
     try {
-      currentContract.off('TicketBought', handler);
-    } catch (e) {
-      // If off() fails, try alternative cleanup
-      try {
-        provider.removeListener({address: CONTRACT_ADDRESS, topics: [ethers.id('TicketBought(address,uint256)')]});
-      } catch {
-        // Last resort cleanup
-        provider.removeAllListeners();
+      if (currentContract) {
+        currentContract.off('TicketBought', handler);
       }
+      // Remove from active subscriptions tracking
+      activeSubscriptions.delete(subscriptionId);
+    } catch (e) {
+      console.error('Error removing TicketBought event listener:', e);
     }
   };
 }
 
 // Subscribe to WinnerSelected events to keep track of winners
 export async function watchWinnerEvents(onWinner) {
-  const currentContract = await getContractInstance();
+  // Generate a unique ID for this subscription
+  const subscriptionId = `winner_${Date.now()}_${Math.random()}`;
+  
+  let currentContract = await getContractInstance();
   if (!currentContract) {
     console.error('Contract not initialized for watchWinnerEvents');
     return () => {}; // Return empty unsubscriber
@@ -187,64 +195,58 @@ export async function watchWinnerEvents(onWinner) {
       };
       onWinner(winnerData);
     } catch (err) {
-      console.error(err);
+      console.error('Error in winner event handler:', err);
     }
   };
 
-  // Listen on the contract for WinnerSelected events
-  try {
-    currentContract.on('WinnerSelected', handler);
-  } catch (e) {
-    console.error('Error setting up WinnerSelected event listener:', e);
-    // Alternative approach using provider directly if .on() fails
+  // Retry mechanism for setting up winner event listener
+  const setupWinnerListener = async () => {
     try {
-      const filter = {
-        address: CONTRACT_ADDRESS,
-        topics: [
-          ethers.id('WinnerSelected(address,uint256)')
-        ]
-      };
-      provider.on(filter, (log) => {
-        try {
-          const contractInterface = new ethers.Interface(CONTRACT_ABI);
-          const parsedLog = contractInterface.parseLog(log);
-          if (parsedLog && parsedLog.args) {
-            const winner = parsedLog.args[0];
-            const round = parsedLog.args[1];
-            const winnerData = {
-              address: winner,
-              round: parseInt(round?.toString?.() ?? '0')
-            };
-            onWinner(winnerData);
-          }
-        } catch (parseErr) {
-          console.error('Error parsing WinnerSelected log:', parseErr);
-        }
-      });
-    } catch (altError) {
-      console.error('Alternative WinnerSelected event listening also failed:', altError);
+      // Remove previous listener if it exists
+      currentContract.off('WinnerSelected', handler);
+      
+      // Get fresh contract instance
+      currentContract = await getContractInstance();
+      if (!currentContract) {
+        throw new Error('Contract not initialized for watchWinnerEvents');
+      }
+      
+      // Listen on the contract for WinnerSelected events
+      currentContract.on('WinnerSelected', handler);
+      console.log('WinnerSelected event listener set up successfully');
+    } catch (e) {
+      console.error('Error setting up WinnerSelected event listener:', e);
+      // Retry after delay
+      setTimeout(setupWinnerListener, EVENT_LISTENER_RETRY_DELAY);
     }
-  }
+  };
+
+  // Initial setup
+  await setupWinnerListener();
+
+  // Add to active subscriptions tracking
+  activeSubscriptions.add(subscriptionId);
 
   // return unsubscribe
   return () => {
     try {
-      currentContract.off('WinnerSelected', handler);
-    } catch (e) {
-      // If off() fails, try alternative cleanup
-      try {
-        provider.removeListener({address: CONTRACT_ADDRESS, topics: [ethers.id('WinnerSelected(address,uint256)')]});
-      } catch {
-        // Last resort cleanup
-        provider.removeAllListeners();
+      if (currentContract) {
+        currentContract.off('WinnerSelected', handler);
       }
+      // Remove from active subscriptions tracking
+      activeSubscriptions.delete(subscriptionId);
+    } catch (e) {
+      console.error('Error removing WinnerSelected event listener:', e);
     }
   };
 }
 
 // Subscribe to PrizePool updates to keep track of the pool amount
 export async function watchPrizePoolUpdates(onUpdate) {
-  const currentContract = await getContractInstance();
+  // Generate a unique ID for this subscription
+  const subscriptionId = `pool_${Date.now()}_${Math.random()}`;
+  
+  let currentContract = await getContractInstance();
   if (!currentContract) {
     console.error('Contract not initialized for watchPrizePoolUpdates');
     return () => {}; // Return empty unsubscriber
@@ -261,49 +263,48 @@ export async function watchPrizePoolUpdates(onUpdate) {
         console.error('Error reading prize pool after ticket purchase:', err);
       });
     } catch (err) {
-      console.error(err);
+      console.error('Error in prize pool update handler:', err);
     }
   };
 
-  try {
-    currentContract.on('TicketBought', handler);
-  } catch (e) {
-    console.error('Error setting up prize pool event listener:', e);
-    // Alternative approach if .on() fails
+  // Retry mechanism for setting up prize pool update listener
+  const setupPoolListener = async () => {
     try {
-      const filter = {
-        address: CONTRACT_ADDRESS,
-        topics: [
-          ethers.id('TicketBought(address,uint256)')
-        ]
-      };
-      provider.on(filter, (log) => {
-        try {
-          const contractInterface = new ethers.Interface(CONTRACT_ABI);
-          const parsedLog = contractInterface.parseLog(log);
-          if (parsedLog && parsedLog.args) {
-            readPrizePool().then(poolAmount => {
-              onUpdate(poolAmount);
-            }).catch(err => {
-              console.error('Error reading prize pool after ticket purchase:', err);
-            });
-          }
-        } catch (parseErr) {
-          console.error('Error parsing log for prize pool update:', parseErr);
-        }
-      });
-    } catch (altError) {
-      console.error('Alternative prize pool event listening also failed:', altError);
+      // Remove previous listener if it exists
+      currentContract.off('TicketBought', handler);
+      
+      // Get fresh contract instance
+      currentContract = await getContractInstance();
+      if (!currentContract) {
+        throw new Error('Contract not initialized for watchPrizePoolUpdates');
+      }
+      
+      // Listen on the contract for TicketBought events (which trigger pool updates)
+      currentContract.on('TicketBought', handler);
+      console.log('PrizePool update listener set up successfully');
+    } catch (e) {
+      console.error('Error setting up prize pool update listener:', e);
+      // Retry after delay
+      setTimeout(setupPoolListener, EVENT_LISTENER_RETRY_DELAY);
     }
-  }
+  };
+
+  // Initial setup
+  await setupPoolListener();
+
+  // Add to active subscriptions tracking
+  activeSubscriptions.add(subscriptionId);
 
   // return unsubscribe
   return () => {
     try {
-      currentContract.off('TicketBought', handler);
+      if (currentContract) {
+        currentContract.off('TicketBought', handler);
+      }
+      // Remove from active subscriptions tracking
+      activeSubscriptions.delete(subscriptionId);
     } catch (e) {
-      // If off() fails, try alternative cleanup
-      provider.removeAllListeners();
+      console.error('Error removing prize pool update listener:', e);
     }
   };
 }
@@ -369,71 +370,73 @@ const winnerEventsCache = {
 
 // Function to get recent winners by querying the blockchain for WinnerSelected events
 export async function getRecentWinners(forceRefresh = false) {
-  // Use cache (valid for 30 seconds)
-  const now = Date.now();
-  if (!forceRefresh && 
-      winnerEventsCache.data && 
-      now - winnerEventsCache.timestamp < 30000) {
-    return winnerEventsCache.data;
-  }
-  
-  // If request is already in progress, return the existing promise
-  if (winnerEventsCache.promise) {
-    return winnerEventsCache.promise;
-  }
-  
-  winnerEventsCache.promise = new Promise(async (resolve) => {
-    try {
-      const currentContract = await getContractInstance();
-      if (!currentContract) {
-        console.error('Contract not initialized');
-        resolve([]);
-        return;
-      }
-      
-      // Get the last blocks to find recent winner events
-      const latestBlock = await provider.getBlockNumber();
-      // Reduce the block range to avoid "Block range is too large" error and rate limits
-      const fromBlock = Math.max(latestBlock - 5000, 0); // Look back at most 5k blocks instead of 10k
-      
-      // Query for WinnerSelected events
-      const filter = currentContract.filters.WinnerSelected;
-      const events = await currentContract.queryFilter(filter, fromBlock);
-      
-      // Process the events to extract winner information
-      const winners = events.map(event => {
-        if (event.args) {
-          return {
-            address: event.args[0] || event.args.winner,
-            round: parseInt(event.args[1] || event.args.round || 0),
-            timestamp: event.blockNumber, // Using block number as proxy; could fetch actual timestamp if needed
-            transactionHash: event.transactionHash
-          };
-        }
-        return null;
-      }).filter(Boolean).reverse(); // Reverse to show most recent first
-      
-      // Update cache
-      winnerEventsCache.data = winners;
-      winnerEventsCache.timestamp = now;
-      
-      // If no WinnerSelected events found, return empty array
-      resolve(winners);
-    } catch (error) {
-      console.error('getRecentWinners error:', error);
-      
-      // On rate limit error, return cached data if available
-      if (error.message?.includes('rate limit') && winnerEventsCache.data) {
-        console.warn('Rate limit hit, returning cached data');
-        resolve(winnerEventsCache.data);
-      } else {
-        // Return empty array as fallback if there's an error
-        resolve([]);
-      }
-    } finally {
-      winnerEventsCache.promise = null;
+  return retryRPCOperation(async () => {
+    // Use cache (valid for 30 seconds)
+    const now = Date.now();
+    if (!forceRefresh && 
+        winnerEventsCache.data && 
+        now - winnerEventsCache.timestamp < 30000) {
+      return winnerEventsCache.data;
     }
-  });
-  
-  return winnerEventsCache.promise;
+    
+    // If request is already in progress, return the existing promise
+    if (winnerEventsCache.promise) {
+      return winnerEventsCache.promise;
+    }
+    
+    winnerEventsCache.promise = new Promise(async (resolve) => {
+      try {
+        const currentContract = await getContractInstance();
+        if (!currentContract) {
+          console.error('Contract not initialized');
+          resolve([]);
+          return;
+        }
+        
+        // Get the last blocks to find recent winner events
+        const latestBlock = await provider.getBlockNumber();
+        // Reduce the block range to avoid "Block range is too large" error and rate limits
+        const fromBlock = Math.max(latestBlock - 5000, 0); // Look back at most 5k blocks instead of 10k
+        
+        // Query for WinnerSelected events
+        const filter = currentContract.filters.WinnerSelected;
+        const events = await currentContract.queryFilter(filter, fromBlock);
+        
+        // Process the events to extract winner information
+        const winners = events.map(event => {
+          if (event.args) {
+            return {
+              address: event.args[0] || event.args.winner,
+              round: parseInt(event.args[1] || event.args.round || 0),
+              timestamp: event.blockNumber, // Using block number as proxy; could fetch actual timestamp if needed
+              transactionHash: event.transactionHash
+            };
+          }
+          return null;
+        }).filter(Boolean).reverse(); // Reverse to show most recent first
+        
+        // Update cache
+        winnerEventsCache.data = winners;
+        winnerEventsCache.timestamp = now;
+        
+        // If no WinnerSelected events found, return empty array
+        resolve(winners);
+      } catch (error) {
+        console.error('getRecentWinners error:', error);
+        
+        // On rate limit error, return cached data if available
+        if (error.message?.includes('rate limit') && winnerEventsCache.data) {
+          console.warn('Rate limit hit, returning cached data');
+          resolve(winnerEventsCache.data);
+        } else {
+          // Return empty array as fallback if there's an error
+          resolve([]);
+        }
+      } finally {
+        winnerEventsCache.promise = null;
+      }
+    });
+    
+    return winnerEventsCache.promise;
+  }, 'getRecentWinners');
 }

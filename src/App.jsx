@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import PoolProgressBar from "./components/PoolProgressBar";
@@ -25,6 +25,7 @@ export default function App() {
   const [walletAddress, setWalletAddress] = useState(null);
   const [signer, setSigner] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Initialize data from smart contract
   useEffect(() => {
@@ -32,13 +33,19 @@ export default function App() {
     
     const initializeData = async () => {
       try {
-        // Wait for contract initialization (max 5 seconds)
+        setLoading(true);
+        setError(null);
+        
+        // Wait for contract initialization (max 10 seconds)
         let attempts = 0;
-        while (attempts < 10) {
+        const maxAttempts = 20; // 20 * 500ms = 10 seconds
+        while (attempts < maxAttempts) {
           try {
             await readPrizePool();
+            console.log('Contract initialized successfully');
             break; // If this succeeds, contract is ready
           } catch (error) {
+            console.log(`Waiting for contract initialization, attempt ${attempts + 1}/${maxAttempts}`, error.message);
             if (error.message && !error.message.includes('Contract not initialized')) {
               // If it's a different error, rethrow it
               throw error;
@@ -46,6 +53,10 @@ export default function App() {
             await new Promise(resolve => setTimeout(resolve, 500));
             attempts++;
           }
+        }
+        
+        if (attempts >= maxAttempts) {
+          throw new Error('Contract failed to initialize within timeout period');
         }
         
         if (!mounted) return;
@@ -86,6 +97,10 @@ export default function App() {
         };
       } catch (error) {
         console.error("Error initializing data:", error);
+        setError(error.message || 'Failed to initialize application');
+        if (mounted) {
+          setLoading(false);
+        }
       } finally {
         if (mounted) {
           setLoading(false);
@@ -138,6 +153,7 @@ export default function App() {
 
     try {
       setLoading(true);
+      setError(null);
       
       // Buy ticket via smart contract
       const result = await buyTicket(signer);
@@ -150,10 +166,12 @@ export default function App() {
         setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
       } else {
         console.error("Transaction failed:", result.error);
+        setError(result.error || 'Transaction failed');
         alert(`Transaction failed: ${result.error}`);
       }
     } catch (error) {
       console.error("Error buying ticket:", error);
+      setError(error.message || 'Error buying ticket');
       alert(`Error buying ticket: ${error.message}`);
     } finally {
       setLoading(false);
@@ -165,6 +183,60 @@ export default function App() {
     setWalletAddress(address);
     setSigner(signer);
   };
+
+  if (error) {
+    return (
+      <div className={styles.pageWrap}>
+        <header className={styles.header}>
+          <div className={styles.containerHeader}>
+            <div className={styles.headerLeft}>
+              <img src="/images/logo.png" alt="Seren Logo" className={styles.logoImage} />
+              <div className={styles.titleBlock}>
+                <div className={styles.projectTitle}>Seren Lottery Chain</div>
+                <div className={styles.subtitle}>{t("subtitle", "Verifiable Randomness — Fair Wins")}</div>
+              </div>
+            </div>
+
+            <div className={styles.headerRight}>
+              <LanguageSelector />
+              <WalletConnect onConnect={onWalletConnect} />
+            </div>
+          </div>
+        </header>
+
+        <main className={styles.main}>
+          <div className={styles.errorContainer}>
+            <h2>Error Loading Application</h2>
+            <p>{error}</p>
+            <button onClick={() => window.location.reload()}>Retry Connection</button>
+          </div>
+        </main>
+
+        <footer className={styles.footer}>
+          <div className={styles.footerTop}>
+            <div className={styles.footerLeft}>
+              <span>{t("footerNote", "Provable randomness powered by Chainlink VRF")}</span>
+            </div>
+            <div className={styles.footerRight}>
+              <span>Powered by Polygon</span>
+            </div>
+          </div>
+          <div className={styles.contractInfo}>
+            <span>Contract: </span>
+            <a 
+              href="https://polygonscan.com/address/0xf90169ad413429af4ae0a3b8962648d4a3289011" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ color: 'var(--accent)', textDecoration: 'none' }}
+            >
+              0xf90169AD413429af4AE0a3B8962648d4a3289011
+            </a>
+          </div>
+          <div className={styles.footerBottom}>© 2025 Seren</div>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.pageWrap}>
