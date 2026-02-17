@@ -3,7 +3,7 @@ import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { ethers } from 'ethers';
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
-import { initializeContract } from '../utils/contractManager';
+import { initializeContract } from '../../utils/contractManager';
 
 // Helper function to detect all available providers
 function getAllProviders() {
