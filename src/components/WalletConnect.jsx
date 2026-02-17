@@ -449,7 +449,7 @@ export default function WalletConnect({ onConnect }) {
         signer
       );
       
-      updateContractInstance(contractWithSigner);
+      updateContractInstance(provider);
       
       // Also initialize through contract manager
       await initializeContract();

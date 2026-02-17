@@ -334,7 +334,9 @@ export async function watchPrizePoolUpdates(onUpdate) {
 // Function to buy a ticket
 export async function buyTicket(signer) {
   try {
-    const contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+    // Import contract details dynamically to ensure they're available
+    const contractModule = await import('./contract');
+    const contractWithSigner = new ethers.Contract(contractModule.CONTRACT_ADDRESS, contractModule.CONTRACT_ABI, signer);
     
     // First, check if the user has enough balance
     const userAddress = await signer.getAddress();
@@ -377,10 +379,20 @@ export async function buyTicket(signer) {
 
 // Function to get connected wallet's tickets
 export async function getUserTickets(walletAddress) {
-  // This would need to be implemented based on the actual contract structure
-  // For now, returning a mock implementation
-  // Since the contract doesn't have a function to get user tickets, return 0
-  return 0;
+  try {
+    const currentContract = await getContractInstance();
+    if (!currentContract) {
+      console.error('Contract not initialized');
+      return 0;
+    }
+    
+    // Call the userTickets mapping in the smart contract
+    const tickets = await currentContract.userTickets(walletAddress);
+    return parseInt(tickets || 0);
+  } catch (error) {
+    console.error('getUserTickets error:', error);
+    return 0;
+  }
 }
 
 // Cache for winner events with timestamp
@@ -414,33 +426,14 @@ export async function getRecentWinners(forceRefresh = false) {
         return;
       }
       
-      // Get the last blocks to find recent winner events
-      const latestBlock = await provider.getBlockNumber();
-      // Reduce the block range to avoid "Block range is too large" error and rate limits
-      const fromBlock = Math.max(latestBlock - 5000, 0); // Look back at most 5k blocks instead of 10k
-      
-      // Query for WinnerSelected events
-      const filter = currentContract.filters.WinnerSelected;
-      const events = await currentContract.queryFilter(filter, fromBlock);
-      
-      // Process the events to extract winner information
-      const winners = events.map(event => {
-        if (event.args) {
-          return {
-            address: event.args[0] || event.args.winner,
-            round: parseInt(event.args[1] || event.args.round || 0),
-            timestamp: event.blockNumber, // Using block number as proxy; could fetch actual timestamp if needed
-            transactionHash: event.transactionHash
-          };
-        }
-        return null;
-      }).filter(Boolean).reverse(); // Reverse to show most recent first
+      // Get winners using the contract manager's method which uses roundWinners
+      const winnersInfo = await import('../../utils/contractManager');
+      const winners = await winnersInfo.getWinnersInfo();
       
       // Update cache
       winnerEventsCache.data = winners;
       winnerEventsCache.timestamp = now;
       
-      // If no WinnerSelected events found, return empty array
       resolve(winners);
     } catch (error) {
       console.error('getRecentWinners error:', error);
