@@ -1,59 +1,40 @@
-```gitignore
-# Dependencies
-node_modules/
+# Examples 1:
+*.module.css
 
-# Build outputs
-dist/
-build/
-target/
+# Example 2 (Project with artifacts):
+Input:
+### Added files:
+[pycache/main.cpython-310.pyc, dist/app.js, .env.local, .vscode/settings.json
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-.ENV
-.python-version
+### Deleted files:
+    []
 
-# Logs
+### Modified files:
+[]
+### current .gitignore Content
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Environment variables
-.env
-.env.local
-.env.*
-!.env.example
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Temporary files
-*.tmp
-*.temp
-```
-```
+Expected Output:
+    #Compiled and build artifacts
+    *.pyc
+    pycache/
+    *.o
+    *.obj
+    dist/
+    build/
+    #Dependencies
+    .venv/
+    venv/
+    node_modules/
+    #Logs and temp files
+    *.log
+    *.tmp
+    *.swp
+    #Environment
+    .env
+    .env.local
+    .env.
+    #Editors
+    .vscode/
+    .idea/
+    #Original rules preserved
+    *.log
