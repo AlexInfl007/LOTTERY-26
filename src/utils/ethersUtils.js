@@ -1,23 +1,28 @@
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from './contract';
 import { ethers } from 'ethers';
+import { getContractAsync } from '../contractManager';
 
 // public RPC (free)
 const DEFAULT_RPC = 'https://polygon-rpc.com'; // бесплатный публичный RPC
 
 // provider можно заменить пользователем при желании
 let provider = new ethers.JsonRpcProvider(DEFAULT_RPC);
-let contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+let contract = null; // Will be initialized via contractManager
 
 // Function to update provider when user connects their wallet
 export function updateProvider(newProvider) {
   provider = newProvider;
-  contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+  // Contract will be handled by contractManager
 }
 
 // Function to get contract instance with fallback
-export function getContractInstance(customProvider = null) {
-  const activeProvider = customProvider || provider;
-  return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, activeProvider);
+export async function getContractInstance(customProvider = null) {
+  if (customProvider) {
+    return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, customProvider);
+  }
+  
+  // Use the contract manager to get the properly initialized contract
+  return await getContractAsync();
 }
 
 // Function to update contract instance when provider changes
@@ -28,7 +33,7 @@ export function updateContractInstance(newProvider) {
   }
   
   provider = newProvider;
-  contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+  // Contract will be handled by contractManager
 }
 
 // Function to get the current provider
@@ -37,14 +42,14 @@ export function getCurrentProvider() {
 }
 
 // Function to get the current contract
-export function getCurrentContract() {
-  return contract;
+export async function getCurrentContract() {
+  return await getContractAsync();
 }
 
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
 export async function readPrizePool() {
   try {
-    const currentContract = getContractInstance();
+    const currentContract = await getContractInstance();
     if (!currentContract) {
       console.error('Contract not initialized');
       return 0;
@@ -60,7 +65,7 @@ export async function readPrizePool() {
     
     // Additional fallback to handle missing methods
     try {
-      const currentContract = getContractInstance();
+      const currentContract = await getContractInstance();
       if (!currentContract) {
         console.error('Contract not initialized for fallback');
         return 0;
@@ -102,8 +107,8 @@ export async function readPrizePool() {
 }
 
 // subscribe to TicketBought events -> calls callback with readable message
-export function watchTicketEvents(onEvent) {
-  const currentContract = getContractInstance();
+export async function watchTicketEvents(onEvent) {
+  const currentContract = await getContractInstance();
   if (!currentContract) {
     console.error('Contract not initialized for watchTicketEvents');
     return () => {}; // Return empty unsubscriber
@@ -167,8 +172,8 @@ export function watchTicketEvents(onEvent) {
 }
 
 // Subscribe to WinnerSelected events to keep track of winners
-export function watchWinnerEvents(onWinner) {
-  const currentContract = getContractInstance();
+export async function watchWinnerEvents(onWinner) {
+  const currentContract = await getContractInstance();
   if (!currentContract) {
     console.error('Contract not initialized for watchWinnerEvents');
     return () => {}; // Return empty unsubscriber
@@ -238,8 +243,8 @@ export function watchWinnerEvents(onWinner) {
 }
 
 // Subscribe to PrizePool updates to keep track of the pool amount
-export function watchPrizePoolUpdates(onUpdate) {
-  const currentContract = getContractInstance();
+export async function watchPrizePoolUpdates(onUpdate) {
+  const currentContract = await getContractInstance();
   if (!currentContract) {
     console.error('Contract not initialized for watchPrizePoolUpdates');
     return () => {}; // Return empty unsubscriber
@@ -355,41 +360,80 @@ export async function getUserTickets(walletAddress) {
   return 0;
 }
 
+// Cache for winner events with timestamp
+const winnerEventsCache = {
+  data: null,
+  timestamp: 0,
+  promise: null
+};
+
 // Function to get recent winners by querying the blockchain for WinnerSelected events
-export async function getRecentWinners() {
-  try {
-    const currentContract = getContractInstance();
-    if (!currentContract) {
-      console.error('Contract not initialized');
-      return [];
-    }
-    
-    // Get the last blocks to find recent winner events
-    const latestBlock = await provider.getBlockNumber();
-    // Reduce the block range to avoid "Block range is too large" error
-    const fromBlock = Math.max(latestBlock - 5000, 0); // Look back at most 5k blocks instead of 10k
-    
-    // Query for WinnerSelected events
-    const filter = currentContract.filters.WinnerSelected;
-    const events = await currentContract.queryFilter(filter, fromBlock);
-    
-    // Process the events to extract winner information
-    const winners = events.map(event => {
-      if (event.args) {
-        return {
-          address: event.args[0] || event.args.winner,
-          round: parseInt(event.args[1] || event.args.round || 0),
-          timestamp: event.blockNumber // Using block number as proxy; could fetch actual timestamp if needed
-        };
-      }
-      return null;
-    }).filter(Boolean).reverse(); // Reverse to show most recent first
-    
-    // If no WinnerSelected events found, return empty array
-    return winners;
-  } catch (error) {
-    console.error('getRecentWinners error:', error);
-    // Return empty array as fallback if there's an error
-    return [];
+export async function getRecentWinners(forceRefresh = false) {
+  // Use cache (valid for 30 seconds)
+  const now = Date.now();
+  if (!forceRefresh && 
+      winnerEventsCache.data && 
+      now - winnerEventsCache.timestamp < 30000) {
+    return winnerEventsCache.data;
   }
+  
+  // If request is already in progress, return the existing promise
+  if (winnerEventsCache.promise) {
+    return winnerEventsCache.promise;
+  }
+  
+  winnerEventsCache.promise = new Promise(async (resolve) => {
+    try {
+      const currentContract = await getContractInstance();
+      if (!currentContract) {
+        console.error('Contract not initialized');
+        resolve([]);
+        return;
+      }
+      
+      // Get the last blocks to find recent winner events
+      const latestBlock = await provider.getBlockNumber();
+      // Reduce the block range to avoid "Block range is too large" error and rate limits
+      const fromBlock = Math.max(latestBlock - 5000, 0); // Look back at most 5k blocks instead of 10k
+      
+      // Query for WinnerSelected events
+      const filter = currentContract.filters.WinnerSelected;
+      const events = await currentContract.queryFilter(filter, fromBlock);
+      
+      // Process the events to extract winner information
+      const winners = events.map(event => {
+        if (event.args) {
+          return {
+            address: event.args[0] || event.args.winner,
+            round: parseInt(event.args[1] || event.args.round || 0),
+            timestamp: event.blockNumber, // Using block number as proxy; could fetch actual timestamp if needed
+            transactionHash: event.transactionHash
+          };
+        }
+        return null;
+      }).filter(Boolean).reverse(); // Reverse to show most recent first
+      
+      // Update cache
+      winnerEventsCache.data = winners;
+      winnerEventsCache.timestamp = now;
+      
+      // If no WinnerSelected events found, return empty array
+      resolve(winners);
+    } catch (error) {
+      console.error('getRecentWinners error:', error);
+      
+      // On rate limit error, return cached data if available
+      if (error.message?.includes('rate limit') && winnerEventsCache.data) {
+        console.warn('Rate limit hit, returning cached data');
+        resolve(winnerEventsCache.data);
+      } else {
+        // Return empty array as fallback if there's an error
+        resolve([]);
+      }
+    } finally {
+      winnerEventsCache.promise = null;
+    }
+  });
+  
+  return winnerEventsCache.promise;
 }

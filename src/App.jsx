@@ -10,7 +10,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates, getRecentWinners } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates, getRecentWinners, watchWinnerEvents } from "./utils/ethersUtils";
 import { ethers } from 'ethers';
 
 export default function App() {
@@ -28,8 +28,28 @@ export default function App() {
 
   // Initialize data from smart contract
   useEffect(() => {
+    let mounted = true;
+    
     const initializeData = async () => {
       try {
+        // Wait for contract initialization (max 5 seconds)
+        let attempts = 0;
+        while (attempts < 10) {
+          try {
+            await readPrizePool();
+            break; // If this succeeds, contract is ready
+          } catch (error) {
+            if (error.message && !error.message.includes('Contract not initialized')) {
+              // If it's a different error, rethrow it
+              throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+            attempts++;
+          }
+        }
+        
+        if (!mounted) return;
+        
         // Get initial pool amount from contract
         const initialPool = await readPrizePool();
         setPoolAmount(initialPool);
@@ -39,7 +59,7 @@ export default function App() {
         setWinners(recentWinners);
         
         // Set up event listener for ticket purchases
-        const unsubscribeTicket = watchTicketEvents((eventMessage) => {
+        const unsubscribeTicket = await watchTicketEvents((eventMessage) => {
           setFeed(prev => [eventMessage, ...prev].slice(0,15));
           // Also increment tickets bought counter when we receive a ticket purchase event
           setTicketsBought(t => t + 1);
@@ -47,18 +67,19 @@ export default function App() {
         
         // Set up event listener for winner selections
         const unsubscribeWinner = watchWinnerEvents && typeof watchWinnerEvents === 'function' 
-          ? watchWinnerEvents((winnerData) => {
+          ? await watchWinnerEvents((winnerData) => {
               setWinners(prev => [winnerData, ...prev].slice(0, 15));
             })
           : () => {};
         
         // Set up event listener for prize pool updates
-        const poolUnsubscribe = watchPrizePoolUpdates((updatedPool) => {
+        const poolUnsubscribe = await watchPrizePoolUpdates((updatedPool) => {
           setPoolAmount(updatedPool);
         });
         
         // Cleanup subscriptions
         return () => {
+          mounted = false;
           unsubscribeTicket();
           unsubscribeWinner();
           poolUnsubscribe();
@@ -66,11 +87,17 @@ export default function App() {
       } catch (error) {
         console.error("Error initializing data:", error);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
     initializeData();
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Periodically update the prize pool to reflect new contributions

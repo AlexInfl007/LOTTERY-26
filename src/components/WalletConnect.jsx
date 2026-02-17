@@ -3,6 +3,7 @@ import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { ethers } from 'ethers';
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
+import { initializeContract } from '../../utils/contractManager';
 
 // Helper function to detect all available providers
 function getAllProviders() {
@@ -302,7 +303,20 @@ export default function WalletConnect({ onConnect }) {
       
       // Update global provider and contract instance with the user's provider
       updateProvider(provider);
-      updateContractInstance(provider);
+      
+      // Create contract instance with signer
+      const CONTRACT_ABI = [ /* вставьте полный ABI */ ];
+      const CONTRACT_ADDRESS = '0xf90169ad413429af4ae0a3b8962648d4a3289011';
+      const contractWithSigner = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        signer
+      );
+      
+      updateContractInstance(contractWithSigner);
+      
+      // Also initialize through contract manager
+      await initializeContract();
       
       // Pass the connection details to the parent component
       onConnect && onConnect(accounts[0], provider, signer);
