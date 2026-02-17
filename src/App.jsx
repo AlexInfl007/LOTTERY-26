@@ -144,7 +144,7 @@ export default function App() {
       <header className={styles.header}>
         <div className={styles.containerHeader}>
           <div className={styles.headerLeft}>
-            <div className={styles.logoBox}>S</div>
+            <img src="/images/logo.png" alt="Seren Logo" className={styles.logoImage} />
             <div className={styles.titleBlock}>
               <div className={styles.projectTitle}>Seren Lottery Chain</div>
               <div className={styles.subtitle}>{t("subtitle", "Verifiable Randomness — Fair Wins")}</div>
