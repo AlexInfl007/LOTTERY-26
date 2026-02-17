@@ -1,6 +1,6 @@
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from './contract';
 import { ethers } from 'ethers';
-import { getContractAsync } from '../utils/contractManager';
+import { getContractAsync } from '../../utils/contractManager';
 
 // public RPC (free)
 const DEFAULT_RPC = 'https://polygon-rpc.com'; // бесплатный публичный RPC
