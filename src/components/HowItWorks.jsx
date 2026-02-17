@@ -14,13 +14,17 @@ export default function HowItWorks() {
       <h3 className={styles.howTitle}>{t("howTitle", "Как сорвать джекпот за 3 шага?")}</h3>
 
       <div className={styles.howCards}>
-        {(hasSteps ? steps : [
+        {[...(hasSteps ? steps : [
           { title: t("howSteps.0.title", "Подключи кошелек и внеси в пул 30POL"), text: t("howSteps.0.text", "Твои 30POL...") },
           { title: t("howSteps.1.title", "Жди своего звездного часа"), text: t("howSteps.1.text", "Пул растет...") },
           { title: t("howSteps.2.title", "Победа!"), text: t("howSteps.2.text", "Chainlink VRF...") }
-        ]).map((s, i) => (
-          <div className={styles.howCard} key={i}>
-            <div className={styles.howNumber}>{i+1}</div>
+        ]), {
+          title: t("howSteps.3.title", "Read more about project"),
+          text: "",
+          isLink: true
+        }].map((s, i) => (
+          <div className={`${styles.howCard} ${s.isLink ? styles.howCardLink : ''}`} key={i}>
+            {!s.isLink && <div className={styles.howNumber}>{i+1}</div>}
             <div className={styles.howCardTitle}>{s.title}</div>
             <div className={styles.howText}>{s.text}</div>
           </div>
