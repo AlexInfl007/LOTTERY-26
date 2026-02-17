@@ -45,6 +45,10 @@ export function getCurrentContract() {
 export async function readPrizePool() {
   try {
     const currentContract = getContractInstance();
+    if (!currentContract) {
+      console.error('Contract not initialized');
+      return 0;
+    }
     
     // Try using callStatic instead of direct contract call to avoid filter issues
     const raw = await currentContract.callStatic.prizePool();
@@ -56,6 +60,12 @@ export async function readPrizePool() {
     
     // Additional fallback to handle missing methods
     try {
+      const currentContract = getContractInstance();
+      if (!currentContract) {
+        console.error('Contract not initialized for fallback');
+        return 0;
+      }
+      
       // Check if getPoolBalance exists as an alternative
       if (typeof currentContract.getPoolBalance !== 'undefined') {
         const raw = await currentContract.callStatic.getPoolBalance();
@@ -94,6 +104,11 @@ export async function readPrizePool() {
 // subscribe to TicketBought events -> calls callback with readable message
 export function watchTicketEvents(onEvent) {
   const currentContract = getContractInstance();
+  if (!currentContract) {
+    console.error('Contract not initialized for watchTicketEvents');
+    return () => {}; // Return empty unsubscriber
+  }
+  
   const handler = (buyer, round) => {
     try {
       const msg = `${buyer} купил билет (round #${round?.toString?.() ?? ''})`;
@@ -154,6 +169,11 @@ export function watchTicketEvents(onEvent) {
 // Subscribe to WinnerSelected events to keep track of winners
 export function watchWinnerEvents(onWinner) {
   const currentContract = getContractInstance();
+  if (!currentContract) {
+    console.error('Contract not initialized for watchWinnerEvents');
+    return () => {}; // Return empty unsubscriber
+  }
+  
   const handler = (winner, round) => {
     try {
       const winnerData = {
@@ -220,6 +240,11 @@ export function watchWinnerEvents(onWinner) {
 // Subscribe to PrizePool updates to keep track of the pool amount
 export function watchPrizePoolUpdates(onUpdate) {
   const currentContract = getContractInstance();
+  if (!currentContract) {
+    console.error('Contract not initialized for watchPrizePoolUpdates');
+    return () => {}; // Return empty unsubscriber
+  }
+  
   // Since we don't have a specific event for prize pool updates, we'll monitor
   // the TicketBought event which affects the pool, and also provide a way to manually refresh
   const handler = (buyer, round) => {
@@ -334,6 +359,10 @@ export async function getUserTickets(walletAddress) {
 export async function getRecentWinners() {
   try {
     const currentContract = getContractInstance();
+    if (!currentContract) {
+      console.error('Contract not initialized');
+      return [];
+    }
     
     // Get the last blocks to find recent winner events
     const latestBlock = await provider.getBlockNumber();
