@@ -161,9 +161,13 @@ export default function App() {
   };
 
   // Callback function to pass to WalletConnect component
-  const onWalletConnect = async (address, provider, signer) => {
+  const onWalletConnect = async (address, web3Provider, signer) => {
     setWalletAddress(address);
     setSigner(signer);
+    
+    // Update provider in ethers utils
+    updateProvider(web3Provider);
+    updateContractInstance(web3Provider);
   };
 
   return (
