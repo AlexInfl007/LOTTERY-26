@@ -170,8 +170,12 @@ export async function watchTicketEvents(onEvent) {
       // If off() fails, try alternative cleanup
       try {
         // Dynamically import the contract address for cleanup
-        const contractModule = await import('./contract');
-        provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('TicketBought(address,uint256)')]});
+        import('./contract').then((contractModule) => {
+          provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('TicketBought(address,uint256)')]});
+        }).catch(() => {
+          // Last resort cleanup
+          provider.removeAllListeners();
+        });
       } catch {
         // Last resort cleanup
         provider.removeAllListeners();
@@ -247,8 +251,12 @@ export async function watchWinnerEvents(onWinner) {
       // If off() fails, try alternative cleanup
       try {
         // Dynamically import the contract address for cleanup
-        const contractModule = await import('./contract');
-        provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('WinnerSelected(address,uint256)')]});
+        import('./contract').then((contractModule) => {
+          provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('WinnerSelected(address,uint256)')]});
+        }).catch(() => {
+          // Last resort cleanup
+          provider.removeAllListeners();
+        });
       } catch {
         // Last resort cleanup
         provider.removeAllListeners();
