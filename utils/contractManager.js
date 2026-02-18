@@ -154,9 +154,14 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
       console.warn(`RPC operation failed, attempt ${i + 1}/${maxRetries}:`, error.message);
       
       // Проверяем, является ли ошибка связанной с RPC
-      if (error.message.includes('rate limit') || 
+      if (error.message.includes('401') || 
+          error.message.includes('API key disabled') || 
+          error.message.includes('tenant disabled') ||
+          error.message.includes('rate limit') || 
           error.message.includes('too many requests') || 
-          error.message.includes('server error')) {
+          error.message.includes('server error') ||
+          error.message.includes('network error') ||
+          error.message.includes('connection refused')) {
         if (i < maxRetries - 1) {
           console.log(`Waiting ${delay}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, delay));
