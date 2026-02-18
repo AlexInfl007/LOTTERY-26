@@ -3,12 +3,11 @@ import { getContractAsync, getContract, initializeContract } from '../../utils/c
 
 // List of RPC providers for rotation
 const RPC_PROVIDERS = [
-  'https://rpc.ankr.com/polygon',
   'https://polygon.llamarpc.com',
-  'https://1rpc.io/matic',
   'https://polygon-bor.publicnode.com',
   'https://polygon.drpc.org',
-  'https://polygon-rpc.com'
+  'https://polygon.meowrpc.com',
+  'https://rpc-mainnet.matic.quiknode.pro'
 ];
 
 let currentProviderIndex = 0;
