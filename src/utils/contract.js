@@ -82,7 +82,20 @@ export const CONTRACT_ABI = [
   },
   {
     "inputs": [],
-    "name": "getBalance",
+    "name": "prizePool",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ticketsCount",
     "outputs": [
       {
         "internalType": "uint256",

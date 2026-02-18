@@ -99,7 +99,7 @@ export async function readPrizePool() {
     }
     
     // Try using callStatic instead of direct contract call to avoid filter issues
-    const raw = await currentContract.callStatic.getBalance();
+    const raw = await currentContract.callStatic.prizePool();
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
