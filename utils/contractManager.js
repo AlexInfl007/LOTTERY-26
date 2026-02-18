@@ -280,27 +280,9 @@ export const getLatestPurchases = async (fromBlock = null) => {
       throw new Error('Contract not available');
     }
 
-    // Получаем номер последнего блока, если fromBlock не указан
-    if (!fromBlock) {
-      const latestBlock = await provider.getBlockNumber();
-      fromBlock = latestBlock - 1000; // За последние 1000 блоков
-    }
-
-    // Получаем фильтр для событий TicketBought
-    const filter = contract.filters.TicketBought();
-    const events = await retryOperation(async () => {
-      return await contract.queryFilter(filter, fromBlock);
-    });
-
-    // Обрабатываем события и возвращаем информацию о покупках
-    const purchases = events.map(event => ({
-      buyer: event.args.buyer,
-      round: event.args.round ? parseInt(event.args.round) : 0,
-      blockNumber: event.blockNumber,
-      transactionHash: event.transactionHash
-    }));
-
-    return purchases.reverse(); // Последние покупки первыми
+    // Our contract doesn't have a TicketBought event, so we'll return empty array
+    // The only event in our ABI is LotteryWon
+    return [];
   } catch (error) {
     console.error('Error getting latest purchases:', error);
     return [];
@@ -374,55 +356,9 @@ export const setupPeriodicUpdates = (callback, intervalMs = 30000) => {
 
 // Функция для подписки на события покупки билетов
 export const subscribeToTicketPurchases = (callback) => {
-  let contract = null;
-  let unsubscribe = null;
-  
-  const setupSubscription = async () => {
-    try {
-      contract = await getContractAsync();
-      if (!contract) {
-        throw new Error('Contract not available for subscription');
-      }
-
-      // Подписываемся на событие enterRaffle (пользователь отправляет средства в лотерею)
-      const handler = (from, amount, event) => {
-        try {
-          callback({
-            from,
-            amount: ethers.formatEther(amount),
-            blockNumber: event.blockNumber,
-            transactionHash: event.transactionHash
-          });
-        } catch (error) {
-          console.error('Error in ticket purchase callback:', error);
-        }
-      };
-
-      // Since our contract doesn't have a specific TicketBought event,
-      // we'll listen for the receive/fallback function payments or transfer events if it's an ERC20 token
-      // For now, since the contract is payable and uses enterRaffle function, we'll need to find a way to track entries
-      // The contract ABI doesn't show a specific event for entering raffle
-      // We could potentially listen to the receive/transfer events but those aren't explicitly defined in the ABI
-      // For now, we'll just listen to any balance change as a potential entry
-      
-      // Alternative: Listen to generic events if possible, or skip this for now
-      // Let's skip the event listener since the ABI doesn't specify any events for ticket purchases
-      // The original ABI only has LotteryWon event
-    } catch (error) {
-      console.error('Error setting up ticket purchase subscription:', error);
-      
-      // Повторная попытка через некоторое время
-      setTimeout(setupSubscription, 5000);
-    }
-  };
-
-  setupSubscription();
-
-  return () => {
-    if (unsubscribe) {
-      unsubscribe();
-    }
-  };
+  // Our contract doesn't have a specific event for ticket purchases,
+  // The only event in our ABI is LotteryWon, so we'll return an empty unsubscriber
+  return () => {};
 };
 
 // Функция для подписки на события выбора победителей
