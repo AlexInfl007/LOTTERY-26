@@ -80,7 +80,20 @@ const CONTRACT_ABI = [
   },
   {
     "inputs": [],
-    "name": "getBalance",
+    "name": "prizePool",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ticketsCount",
     "outputs": [
       {
         "internalType": "uint256",
@@ -202,7 +215,7 @@ export const initializeContract = async (force = false) => {
       
       // Проверяем, что контракт отвечает, с повторными попытками
       await retryOperation(async () => {
-        await contractInstance.getBalance();
+        await contractInstance.prizePool();
       });
       
       console.log('Contract initialized successfully');
@@ -226,7 +239,7 @@ export const getContractAsync = async () => {
   if (contractInstance) {
     // Дополнительная проверка, что контракт все еще рабочий
     try {
-      await contractInstance.getBalance();
+      await contractInstance.prizePool();
       return contractInstance;
     } catch (error) {
       console.warn('Existing contract instance failed, reinitializing:', error);
@@ -326,7 +339,7 @@ export const setupPeriodicUpdates = (callback, intervalMs = 30000) => {
       
       // Получаем актуальные данные
       const prizePool = await retryOperation(async () => {
-        return await contract.getBalance();
+        return await contract.prizePool();
       });
       
       // Вызываем callback с обновленными данными
