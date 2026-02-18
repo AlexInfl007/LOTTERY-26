@@ -10,7 +10,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates, getRecentWinners, watchWinnerEvents } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance } from "./utils/ethersUtils";
 import { ethers } from 'ethers';
 
 export default function App() {
