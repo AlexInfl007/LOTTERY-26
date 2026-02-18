@@ -1,30 +1,10 @@
 import { ethers } from 'ethers';
 import { getContractAsync, getContract, initializeContract } from '../../utils/contractManager';
+import { getValidPolygonProvider, makePolygonRpcCall, getPolygonProvider } from './polygonProvider';
 
-// List of RPC providers for rotation
-const RPC_PROVIDERS = [
-  'https://polygon.llamarpc.com',
-  'https://polygon-bor.publicnode.com',
-  'https://polygon.drpc.org',
-  'https://polygon.meowrpc.com',
-  'https://rpc-mainnet.matic.quiknode.pro'
-];
-
-let currentProviderIndex = 0;
-let provider = new ethers.JsonRpcProvider(RPC_PROVIDERS[currentProviderIndex], undefined, {
-  staticNetwork: ethers.Network.from('matic')
-});
+// Using the new RPC manager for Polygon network
+let provider = null;
 let contract = null; // Will be initialized via contractManager
-
-// Function to rotate to next RPC provider
-function rotateProvider() {
-  currentProviderIndex = (currentProviderIndex + 1) % RPC_PROVIDERS.length;
-  provider = new ethers.JsonRpcProvider(RPC_PROVIDERS[currentProviderIndex], undefined, {
-    staticNetwork: ethers.Network.from('matic')
-  });
-  console.log(`Switched to RPC provider: ${RPC_PROVIDERS[currentProviderIndex]}`);
-  return provider;
-}
 
 // Function to update provider when user connects their wallet
 export function updateProvider(newProvider) {
@@ -56,7 +36,11 @@ export function updateContractInstance(newProvider) {
 }
 
 // Function to get the current provider
-export function getCurrentProvider() {
+export async function getCurrentProvider() {
+  if (!provider) {
+    // If no wallet provider, return our managed Polygon provider
+    return await getValidPolygonProvider();
+  }
   return provider;
 }
 
@@ -67,14 +51,10 @@ export async function getCurrentContract() {
 
 // Helper function to handle RPC errors and rotate providers
 async function handleRPCErrors(operation, operationName = 'RPC operation') {
-  let lastError;
-  
-  // Try the current provider first
   try {
     return await operation();
   } catch (error) {
-    lastError = error;
-    console.warn(`${operationName} failed with current provider:`, error.message);
+    console.warn(`${operationName} failed:`, error.message);
     
     // Check if this is an RPC error that warrants trying another provider
     if (error.message.includes('401') || 
@@ -84,24 +64,28 @@ async function handleRPCErrors(operation, operationName = 'RPC operation') {
         error.message.includes('too many requests') || 
         error.message.includes('server error') ||
         error.message.includes('network error') ||
-        error.message.includes('connection refused')) {
+        error.message.includes('connection refused') ||
+        error.message.includes('timeout') ||
+        error.message.includes('ECONNRESET') ||
+        error.message.includes('ENOTFOUND')) {
       
-      console.log(`Rotating RPC provider due to error...`);
-      rotateProvider();
+      console.log(`Attempting to switch RPC provider due to error...`);
       
-      // Retry the operation with the new provider
+      // Switch to a new provider through our RPC manager
       try {
-        const result = await operation();
-        console.log(`${operationName} succeeded with new provider`);
-        return result;
+        const newProvider = await getValidPolygonProvider();
+        console.log(`${operationName} will retry with new provider`);
+        
+        // Retry the operation with the new provider
+        return await operation();
       } catch (retryError) {
-        console.warn(`${operationName} failed again with new provider:`, retryError.message);
-        lastError = retryError;
+        console.error(`${operationName} failed even with new provider:`, retryError.message);
+        throw retryError;
       }
     }
     
     // If it's not an RPC-related error, just rethrow
-    throw lastError;
+    throw error;
   }
 }
 
