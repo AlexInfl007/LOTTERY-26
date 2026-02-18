@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { getCurrentProvider } from '../src/utils/ethersUtils';
+import { getCurrentProvider } from './src/utils/ethersUtils';
 
 // Полный ABI контракта
 const CONTRACT_ABI = [
@@ -197,7 +197,7 @@ export const initializeContract = async (force = false) => {
     try {
       // Получаем провайдер с оберткой для повторных попыток
       const providerOperation = async () => {
-        const p = getCurrentProvider();
+        const p = await getCurrentProvider();
         if (!p) {
           throw new Error('No provider available');
         }
