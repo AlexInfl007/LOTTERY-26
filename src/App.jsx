@@ -10,7 +10,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider } from "./utils/ethersUtils";
 import { ethers } from 'ethers';
 
 export default function App() {
@@ -63,6 +63,10 @@ export default function App() {
         // Get initial pool amount from contract
         const initialPool = await readPrizePool();
         setPoolAmount(initialPool);
+        
+        // Get initial tickets count from contract
+        const initialTicketsCount = await getTicketsCount();
+        setTicketsBought(initialTicketsCount);
         
         // Get recent winners from contract
         const recentWinners = await getRecentWinners();

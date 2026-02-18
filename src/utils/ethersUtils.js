@@ -317,6 +317,32 @@ export async function getUserTickets(walletAddress) {
   }
 }
 
+// Function to get tickets count with error handling
+export async function getTicketsCount() {
+  // Check if we have a provider (wallet connected)
+  const currentProvider = await getCurrentProvider();
+  if (!currentProvider) {
+    // Return null if no provider (wallet not connected)
+    return null;
+  }
+
+  try {
+    const currentContract = await getContractInstance();
+    if (!currentContract) {
+      console.error('Contract not initialized');
+      return 0;
+    }
+
+    const raw = await currentContract.callStatic.ticketsCount();
+    // Convert BigInt to number
+    const formatted = Number(raw || 0);
+    return formatted;
+  } catch (error) {
+    console.error('Error getting tickets count:', error);
+    return 0; // Return 0 if the function doesn't exist or other error occurs
+  }
+}
+
 // Cache for winner events with timestamp
 const winnerEventsCache = {
   data: null,
