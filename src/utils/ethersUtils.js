@@ -1,12 +1,31 @@
 import { ethers } from 'ethers';
 import { getContractAsync, getContract, initializeContract } from '../../utils/contractManager';
 
-// public RPC (free)
-const DEFAULT_RPC = 'https://polygon-rpc.com'; // бесплатный публичный RPC
+// List of RPC providers for rotation
+const RPC_PROVIDERS = [
+  'https://rpc.ankr.com/polygon',
+  'https://polygon.llamarpc.com',
+  'https://1rpc.io/matic',
+  'https://polygon-bor.publicnode.com',
+  'https://polygon.drpc.org',
+  'https://polygon-rpc.com'
+];
 
-// provider можно заменить пользователем при желании
-let provider = new ethers.JsonRpcProvider(DEFAULT_RPC);
+let currentProviderIndex = 0;
+let provider = new ethers.JsonRpcProvider(RPC_PROVIDERS[currentProviderIndex], undefined, {
+  staticNetwork: ethers.Network.from('matic')
+});
 let contract = null; // Will be initialized via contractManager
+
+// Function to rotate to next RPC provider
+function rotateProvider() {
+  currentProviderIndex = (currentProviderIndex + 1) % RPC_PROVIDERS.length;
+  provider = new ethers.JsonRpcProvider(RPC_PROVIDERS[currentProviderIndex], undefined, {
+    staticNetwork: ethers.Network.from('matic')
+  });
+  console.log(`Switched to RPC provider: ${RPC_PROVIDERS[currentProviderIndex]}`);
+  return provider;
+}
 
 // Function to update provider when user connects their wallet
 export function updateProvider(newProvider) {
@@ -47,9 +66,49 @@ export async function getCurrentContract() {
   return await getContractAsync();
 }
 
+// Helper function to handle RPC errors and rotate providers
+async function handleRPCErrors(operation, operationName = 'RPC operation') {
+  let lastError;
+  
+  // Try the current provider first
+  try {
+    return await operation();
+  } catch (error) {
+    lastError = error;
+    console.warn(`${operationName} failed with current provider:`, error.message);
+    
+    // Check if this is an RPC error that warrants trying another provider
+    if (error.message.includes('401') || 
+        error.message.includes('API key disabled') || 
+        error.message.includes('tenant disabled') ||
+        error.message.includes('rate limit') || 
+        error.message.includes('too many requests') || 
+        error.message.includes('server error') ||
+        error.message.includes('network error') ||
+        error.message.includes('connection refused')) {
+      
+      console.log(`Rotating RPC provider due to error...`);
+      rotateProvider();
+      
+      // Retry the operation with the new provider
+      try {
+        const result = await operation();
+        console.log(`${operationName} succeeded with new provider`);
+        return result;
+      } catch (retryError) {
+        console.warn(`${operationName} failed again with new provider:`, retryError.message);
+        lastError = retryError;
+      }
+    }
+    
+    // If it's not an RPC-related error, just rethrow
+    throw lastError;
+  }
+}
+
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
 export async function readPrizePool() {
-  try {
+  return handleRPCErrors(async () => {
     const currentContract = await getContractInstance();
     if (!currentContract) {
       console.error('Contract not initialized');
@@ -61,52 +120,7 @@ export async function readPrizePool() {
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
-  } catch (e) {
-    console.error('readPrizePool error', e);
-    
-    // Additional fallback to handle missing methods
-    try {
-      const currentContract = await getContractInstance();
-      if (!currentContract) {
-        console.error('Contract not initialized for fallback');
-        return 0;
-      }
-      
-      // Check if getPoolBalance exists as an alternative
-      if (typeof currentContract.getPoolBalance !== 'undefined') {
-        const raw = await currentContract.callStatic.getPoolBalance();
-        const formatted = Number(ethers.formatEther(raw || 0));
-        return formatted;
-      }
-    } catch (altError) {
-      console.error('getPoolBalance also failed', altError);
-    }
-    
-    // Try fallback approach using provider directly
-    try {
-      // Dynamically import the contract ABI and address for fallback
-      const contractModule = await import('./contract');
-      const contractInterface = new ethers.Interface(contractModule.CONTRACT_ABI);
-      const data = contractInterface.encodeFunctionData("getBalance");
-      
-      const result = await provider.call({
-        to: contractModule.CONTRACT_ADDRESS,
-        data: data
-      });
-      
-      if (result === '0x') {
-        console.warn('Received empty result from contract call');
-        return 0;
-      }
-      
-      const decoded = contractInterface.decodeFunctionResult("getBalance", result);
-      const formatted = Number(ethers.formatEther(decoded[0] || 0));
-      return formatted;
-    } catch (fallbackError) {
-      console.error('readPrizePool fallback error', fallbackError);
-      return 0;
-    }
-  }
+  }, 'readPrizePool');
 }
 
 // subscribe to enterRaffle events -> calls callback with readable message
@@ -138,83 +152,85 @@ export async function watchTicketEvents(onEvent) {
 
 // Subscribe to LotteryWon events to keep track of winners
 export async function watchWinnerEvents(onWinner) {
-  const currentContract = await getContractInstance();
-  if (!currentContract) {
-    console.error('Contract not initialized for watchWinnerEvents');
-    return () => {}; // Return empty unsubscriber
-  }
-  
-  const handler = (winner, amount, event) => {
-    try {
-      const winnerData = {
-        address: winner,
-        amount: ethers.formatEther(amount)
-      };
-      onWinner(winnerData);
-    } catch (err) {
-      console.error(err);
+  return handleRPCErrors(async () => {
+    const currentContract = await getContractInstance();
+    if (!currentContract) {
+      console.error('Contract not initialized for watchWinnerEvents');
+      return () => {}; // Return empty unsubscriber
     }
-  };
-
-  // Listen on the contract for LotteryWon events
-  try {
-    currentContract.on('LotteryWon', handler);
-  } catch (e) {
-    console.error('Error setting up LotteryWon event listener:', e);
-    // Alternative approach using provider directly if .on() fails
-    try {
-      // Dynamically import the contract address for the filter
-      const contractModule = await import('./contract');
-      const filter = {
-        address: contractModule.CONTRACT_ADDRESS,
-        topics: [
-          ethers.id('LotteryWon(address,uint256)')
-        ]
-      };
-      provider.on(filter, async (log) => {
-        try {
-          // Dynamically import the contract ABI for parsing
-          const contractModule = await import('./contract');
-          const contractInterface = new ethers.Interface(contractModule.CONTRACT_ABI);
-          const parsedLog = contractInterface.parseLog(log);
-          if (parsedLog && parsedLog.args) {
-            const winner = parsedLog.args[0];
-            const amount = parsedLog.args[1];
-            const winnerData = {
-              address: winner,
-              amount: ethers.formatEther(amount)
-            };
-            onWinner(winnerData);
-          }
-        } catch (parseErr) {
-          console.error('Error parsing LotteryWon log:', parseErr);
-        }
-      });
-    } catch (altError) {
-      console.error('Alternative LotteryWon event listening also failed:', altError);
-    }
-  }
-
-  // return unsubscribe
-  return () => {
-    try {
-      currentContract.off('LotteryWon', handler);
-    } catch (e) {
-      // If off() fails, try alternative cleanup
+    
+    const handler = (winner, amount, event) => {
       try {
-        // Dynamically import the contract address for cleanup
-        import('./contract').then((contractModule) => {
-          provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('LotteryWon(address,uint256)')]});
-        }).catch(() => {
-          // Last resort cleanup
-          provider.removeAllListeners();
+        const winnerData = {
+          address: winner,
+          amount: ethers.formatEther(amount)
+        };
+        onWinner(winnerData);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    // Listen on the contract for LotteryWon events
+    try {
+      currentContract.on('LotteryWon', handler);
+    } catch (e) {
+      console.error('Error setting up LotteryWon event listener:', e);
+      // Alternative approach using provider directly if .on() fails
+      try {
+        // Dynamically import the contract address for the filter
+        const contractModule = await import('./contract');
+        const filter = {
+          address: contractModule.CONTRACT_ADDRESS,
+          topics: [
+            ethers.id('LotteryWon(address,uint256)')
+          ]
+        };
+        provider.on(filter, async (log) => {
+          try {
+            // Dynamically import the contract ABI for parsing
+            const contractModule = await import('./contract');
+            const contractInterface = new ethers.Interface(contractModule.CONTRACT_ABI);
+            const parsedLog = contractInterface.parseLog(log);
+            if (parsedLog && parsedLog.args) {
+              const winner = parsedLog.args[0];
+              const amount = parsedLog.args[1];
+              const winnerData = {
+                address: winner,
+                amount: ethers.formatEther(amount)
+              };
+              onWinner(winnerData);
+            }
+          } catch (parseErr) {
+            console.error('Error parsing LotteryWon log:', parseErr);
+          }
         });
-      } catch {
-        // Last resort cleanup
-        provider.removeAllListeners();
+      } catch (altError) {
+        console.error('Alternative LotteryWon event listening also failed:', altError);
       }
     }
-  };
+
+    // return unsubscribe
+    return () => {
+      try {
+        currentContract.off('LotteryWon', handler);
+      } catch (e) {
+        // If off() fails, try alternative cleanup
+        try {
+          // Dynamically import the contract address for cleanup
+          import('./contract').then((contractModule) => {
+            provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('LotteryWon(address,uint256)')]});
+          }).catch(() => {
+            // Last resort cleanup
+            provider.removeAllListeners();
+          });
+        } catch {
+          // Last resort cleanup
+          provider.removeAllListeners();
+        }
+      }
+    };
+  }, 'watchWinnerEvents');
 }
 
 // Subscribe to PrizePool updates to keep track of the pool amount
@@ -306,53 +322,55 @@ const winnerEventsCache = {
 
 // Function to get recent winners by querying the blockchain for LotteryWon events
 export async function getRecentWinners(forceRefresh = false) {
-  // Use cache (valid for 30 seconds)
-  const now = Date.now();
-  if (!forceRefresh && 
-      winnerEventsCache.data && 
-      now - winnerEventsCache.timestamp < 30000) {
-    return winnerEventsCache.data;
-  }
-  
-  // If request is already in progress, return the existing promise
-  if (winnerEventsCache.promise) {
-    return winnerEventsCache.promise;
-  }
-  
-  winnerEventsCache.promise = new Promise(async (resolve) => {
-    try {
-      const currentContract = await getContractInstance();
-      if (!currentContract) {
-        console.error('Contract not initialized');
-        resolve([]);
-        return;
-      }
-      
-      // Since our contract doesn't have round-based winner tracking,
-      // we'll return an empty array as there's no way to get historical winners
-      // from the current contract ABI
-      const winners = [];
-      
-      // Update cache
-      winnerEventsCache.data = winners;
-      winnerEventsCache.timestamp = now;
-      
-      resolve(winners);
-    } catch (error) {
-      console.error('getRecentWinners error:', error);
-      
-      // On rate limit error, return cached data if available
-      if (error.message?.includes('rate limit') && winnerEventsCache.data) {
-        console.warn('Rate limit hit, returning cached data');
-        resolve(winnerEventsCache.data);
-      } else {
-        // Return empty array as fallback if there's an error
-        resolve([]);
-      }
-    } finally {
-      winnerEventsCache.promise = null;
+  return handleRPCErrors(async () => {
+    // Use cache (valid for 30 seconds)
+    const now = Date.now();
+    if (!forceRefresh && 
+        winnerEventsCache.data && 
+        now - winnerEventsCache.timestamp < 30000) {
+      return winnerEventsCache.data;
     }
-  });
-  
-  return winnerEventsCache.promise;
+    
+    // If request is already in progress, return the existing promise
+    if (winnerEventsCache.promise) {
+      return winnerEventsCache.promise;
+    }
+    
+    winnerEventsCache.promise = new Promise(async (resolve) => {
+      try {
+        const currentContract = await getContractInstance();
+        if (!currentContract) {
+          console.error('Contract not initialized');
+          resolve([]);
+          return;
+        }
+        
+        // Since our contract doesn't have round-based winner tracking,
+        // we'll return an empty array as there's no way to get historical winners
+        // from the current contract ABI
+        const winners = [];
+        
+        // Update cache
+        winnerEventsCache.data = winners;
+        winnerEventsCache.timestamp = now;
+        
+        resolve(winners);
+      } catch (error) {
+        console.error('getRecentWinners error:', error);
+        
+        // On rate limit error, return cached data if available
+        if (error.message?.includes('rate limit') && winnerEventsCache.data) {
+          console.warn('Rate limit hit, returning cached data');
+          resolve(winnerEventsCache.data);
+        } else {
+          // Return empty array as fallback if there's an error
+          resolve([]);
+        }
+      } finally {
+        winnerEventsCache.promise = null;
+      }
+    });
+    
+    return winnerEventsCache.promise;
+  }, 'getRecentWinners');
 }
