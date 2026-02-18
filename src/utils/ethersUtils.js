@@ -57,7 +57,7 @@ export async function readPrizePool() {
     }
     
     // Try using callStatic instead of direct contract call to avoid filter issues
-    const raw = await currentContract.callStatic.prizePool();
+    const raw = await currentContract.callStatic.getBalance();
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
@@ -87,7 +87,7 @@ export async function readPrizePool() {
       // Dynamically import the contract ABI and address for fallback
       const contractModule = await import('./contract');
       const contractInterface = new ethers.Interface(contractModule.CONTRACT_ABI);
-      const data = contractInterface.encodeFunctionData("prizePool");
+      const data = contractInterface.encodeFunctionData("getBalance");
       
       const result = await provider.call({
         to: contractModule.CONTRACT_ADDRESS,
@@ -99,7 +99,7 @@ export async function readPrizePool() {
         return 0;
       }
       
-      const decoded = contractInterface.decodeFunctionResult("prizePool", result);
+      const decoded = contractInterface.decodeFunctionResult("getBalance", result);
       const formatted = Number(ethers.formatEther(decoded[0] || 0));
       return formatted;
     } catch (fallbackError) {
@@ -354,7 +354,7 @@ export async function buyTicket(signer) {
     };
     
     // Buy ticket with 30 POL payment
-    const tx = await contractWithSigner.buyTicket(txRequest);
+    const tx = await contractWithSigner.enterRaffle(txRequest);
     
     // Wait for transaction receipt
     const receipt = await tx.wait();
@@ -386,9 +386,9 @@ export async function getUserTickets(walletAddress) {
       return 0;
     }
     
-    // Call the userTickets mapping in the smart contract
-    const tickets = await currentContract.userTickets(walletAddress);
-    return parseInt(tickets || 0);
+    // Call the players mapping in the smart contract
+    const isPlayer = await currentContract.players(walletAddress);
+    return isPlayer ? 1 : 0;
   } catch (error) {
     console.error('getUserTickets error:', error);
     return 0;
