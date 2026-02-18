@@ -109,7 +109,7 @@ export async function readPrizePool() {
   }
 }
 
-// subscribe to TicketBought events -> calls callback with readable message
+// subscribe to enterRaffle events -> calls callback with readable message
 export async function watchTicketEvents(onEvent) {
   const currentContract = await getContractInstance();
   if (!currentContract) {
@@ -117,74 +117,26 @@ export async function watchTicketEvents(onEvent) {
     return () => {}; // Return empty unsubscriber
   }
   
-  const handler = (buyer, round) => {
+  const handler = (from, value, event) => {
     try {
-      const msg = `${buyer} купил билет (round #${round?.toString?.() ?? ''})`;
+      const msg = `${from} купил билет (${ethers.formatEther(value)} POL)`;
       onEvent(msg);
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Listen on the contract for TicketBought events
-  try {
-    currentContract.on('TicketBought', handler);
-  } catch (e) {
-    console.error('Error setting up event listener:', e);
-    // Alternative approach using provider directly if .on() fails
-    try {
-      // Dynamically import the contract address for the filter
-      const contractModule = await import('./contract');
-      const filter = {
-        address: contractModule.CONTRACT_ADDRESS,
-        topics: [
-          ethers.id('TicketBought(address,uint256)')
-        ]
-      };
-      provider.on(filter, async (log) => {
-        try {
-          // Dynamically import the contract ABI for parsing
-          const contractModule = await import('./contract');
-          const contractInterface = new ethers.Interface(contractModule.CONTRACT_ABI);
-          const parsedLog = contractInterface.parseLog(log);
-          if (parsedLog && parsedLog.args) {
-            const buyer = parsedLog.args[0];
-            const round = parsedLog.args[1];
-            const msg = `${buyer} купил билет (round #${round?.toString?.() ?? ''})`;
-            onEvent(msg);
-          }
-        } catch (parseErr) {
-          console.error('Error parsing log:', parseErr);
-        }
-      });
-    } catch (altError) {
-      console.error('Alternative event listening also failed:', altError);
-    }
-  }
-
-  // return unsubscribe
-  return () => {
-    try {
-      currentContract.off('TicketBought', handler);
-    } catch (e) {
-      // If off() fails, try alternative cleanup
-      try {
-        // Dynamically import the contract address for cleanup
-        import('./contract').then((contractModule) => {
-          provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('TicketBought(address,uint256)')]});
-        }).catch(() => {
-          // Last resort cleanup
-          provider.removeAllListeners();
-        });
-      } catch {
-        // Last resort cleanup
-        provider.removeAllListeners();
-      }
-    }
-  };
+  // Listen on the contract for enterRaffle function calls
+  // Since our contract ABI doesn't have a specific event for ticket purchases,
+  // we'll need to listen to the receive/transfer events or potentially just track balance changes
+  // The only event in our ABI is LotteryWon
+  // For now, we'll skip this functionality as there's no direct event for ticket purchases in the ABI
+  
+  // Return empty unsubscriber since we can't properly listen to ticket purchase events
+  return () => {};
 }
 
-// Subscribe to WinnerSelected events to keep track of winners
+// Subscribe to LotteryWon events to keep track of winners
 export async function watchWinnerEvents(onWinner) {
   const currentContract = await getContractInstance();
   if (!currentContract) {
@@ -192,11 +144,11 @@ export async function watchWinnerEvents(onWinner) {
     return () => {}; // Return empty unsubscriber
   }
   
-  const handler = (winner, round) => {
+  const handler = (winner, amount, event) => {
     try {
       const winnerData = {
         address: winner,
-        round: parseInt(round?.toString?.() ?? '0')
+        amount: ethers.formatEther(amount)
       };
       onWinner(winnerData);
     } catch (err) {
@@ -204,11 +156,11 @@ export async function watchWinnerEvents(onWinner) {
     }
   };
 
-  // Listen on the contract for WinnerSelected events
+  // Listen on the contract for LotteryWon events
   try {
-    currentContract.on('WinnerSelected', handler);
+    currentContract.on('LotteryWon', handler);
   } catch (e) {
-    console.error('Error setting up WinnerSelected event listener:', e);
+    console.error('Error setting up LotteryWon event listener:', e);
     // Alternative approach using provider directly if .on() fails
     try {
       // Dynamically import the contract address for the filter
@@ -216,7 +168,7 @@ export async function watchWinnerEvents(onWinner) {
       const filter = {
         address: contractModule.CONTRACT_ADDRESS,
         topics: [
-          ethers.id('WinnerSelected(address,uint256)')
+          ethers.id('LotteryWon(address,uint256)')
         ]
       };
       provider.on(filter, async (log) => {
@@ -227,32 +179,32 @@ export async function watchWinnerEvents(onWinner) {
           const parsedLog = contractInterface.parseLog(log);
           if (parsedLog && parsedLog.args) {
             const winner = parsedLog.args[0];
-            const round = parsedLog.args[1];
+            const amount = parsedLog.args[1];
             const winnerData = {
               address: winner,
-              round: parseInt(round?.toString?.() ?? '0')
+              amount: ethers.formatEther(amount)
             };
             onWinner(winnerData);
           }
         } catch (parseErr) {
-          console.error('Error parsing WinnerSelected log:', parseErr);
+          console.error('Error parsing LotteryWon log:', parseErr);
         }
       });
     } catch (altError) {
-      console.error('Alternative WinnerSelected event listening also failed:', altError);
+      console.error('Alternative LotteryWon event listening also failed:', altError);
     }
   }
 
   // return unsubscribe
   return () => {
     try {
-      currentContract.off('WinnerSelected', handler);
+      currentContract.off('LotteryWon', handler);
     } catch (e) {
       // If off() fails, try alternative cleanup
       try {
         // Dynamically import the contract address for cleanup
         import('./contract').then((contractModule) => {
-          provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('WinnerSelected(address,uint256)')]});
+          provider.removeListener({address: contractModule.CONTRACT_ADDRESS, topics: [ethers.id('LotteryWon(address,uint256)')]});
         }).catch(() => {
           // Last resort cleanup
           provider.removeAllListeners();
@@ -273,62 +225,12 @@ export async function watchPrizePoolUpdates(onUpdate) {
     return () => {}; // Return empty unsubscriber
   }
   
-  // Since we don't have a specific event for prize pool updates, we'll monitor
-  // the TicketBought event which affects the pool, and also provide a way to manually refresh
-  const handler = (buyer, round) => {
-    try {
-      // When a ticket is bought, the prize pool increases
-      readPrizePool().then(poolAmount => {
-        onUpdate(poolAmount);
-      }).catch(err => {
-        console.error('Error reading prize pool after ticket purchase:', err);
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  try {
-    currentContract.on('TicketBought', handler);
-  } catch (e) {
-    console.error('Error setting up prize pool event listener:', e);
-    // Alternative approach if .on() fails
-    try {
-      const filter = {
-        address: CONTRACT_ADDRESS,
-        topics: [
-          ethers.id('TicketBought(address,uint256)')
-        ]
-      };
-      provider.on(filter, (log) => {
-        try {
-          const contractInterface = new ethers.Interface(CONTRACT_ABI);
-          const parsedLog = contractInterface.parseLog(log);
-          if (parsedLog && parsedLog.args) {
-            readPrizePool().then(poolAmount => {
-              onUpdate(poolAmount);
-            }).catch(err => {
-              console.error('Error reading prize pool after ticket purchase:', err);
-            });
-          }
-        } catch (parseErr) {
-          console.error('Error parsing log for prize pool update:', parseErr);
-        }
-      });
-    } catch (altError) {
-      console.error('Alternative prize pool event listening also failed:', altError);
-    }
-  }
-
-  // return unsubscribe
-  return () => {
-    try {
-      currentContract.off('TicketBought', handler);
-    } catch (e) {
-      // If off() fails, try alternative cleanup
-      provider.removeAllListeners();
-    }
-  };
+  // Since we don't have a specific event for prize pool updates in our contract,
+  // we'll periodically poll for updates instead of relying on events
+  // The only event in our ABI is LotteryWon, which reduces the pool rather than increases it
+  
+  // Return empty unsubscriber since we're not using event listeners for this
+  return () => {};
 }
 
 // Function to buy a ticket
@@ -402,7 +304,7 @@ const winnerEventsCache = {
   promise: null
 };
 
-// Function to get recent winners by querying the blockchain for WinnerSelected events
+// Function to get recent winners by querying the blockchain for LotteryWon events
 export async function getRecentWinners(forceRefresh = false) {
   // Use cache (valid for 30 seconds)
   const now = Date.now();
@@ -426,9 +328,10 @@ export async function getRecentWinners(forceRefresh = false) {
         return;
       }
       
-      // Get winners using the contract manager's method which uses roundWinners
-      const winnersInfo = await import('../../utils/contractManager');
-      const winners = await winnersInfo.getWinnersInfo();
+      // Since our contract doesn't have round-based winner tracking,
+      // we'll return an empty array as there's no way to get historical winners
+      // from the current contract ABI
+      const winners = [];
       
       // Update cache
       winnerEventsCache.data = winners;
