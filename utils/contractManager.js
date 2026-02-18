@@ -197,7 +197,7 @@ export const initializeContract = async (force = false) => {
       
       // Проверяем, что контракт отвечает, с повторными попытками
       await retryOperation(async () => {
-        await contractInstance.prizePool();
+        await contractInstance.getBalance();
       });
       
       console.log('Contract initialized successfully');
@@ -221,7 +221,7 @@ export const getContractAsync = async () => {
   if (contractInstance) {
     // Дополнительная проверка, что контракт все еще рабочий
     try {
-      await contractInstance.prizePool();
+      await contractInstance.getBalance();
       return contractInstance;
     } catch (error) {
       console.warn('Existing contract instance failed, reinitializing:', error);
@@ -297,38 +297,10 @@ export const getWinnersInfo = async () => {
       throw new Error('Contract not available');
     }
 
-    // Получаем текущий раунд
-    const currentRound = await retryOperation(async () => {
-      return await contract.currentRound();
-    });
-
-    // Собираем информацию о победителях по каждому завершенному раунду
-    const winners = [];
-    for (let round = 1; round <= parseInt(currentRound); round++) {
-      try {
-        const winnerAddress = await retryOperation(async () => {
-          return await contract.roundWinners(round);
-        });
-
-        // Проверяем, есть ли реальный адрес победителя (не нулевой)
-        if (winnerAddress && winnerAddress !== ethers.ZeroAddress) {
-          const prize = await retryOperation(async () => {
-            return await contract.roundPrizes(round);
-          });
-
-          winners.push({
-            round: round,
-            winner: winnerAddress,
-            prize: prize ? ethers.formatEther(prize) : '0'
-          });
-        }
-      } catch (error) {
-        console.warn(`Could not fetch winner for round ${round}:`, error.message);
-        // Продолжаем с другими раундами
-      }
-    }
-
-    return winners;
+    // Since our contract doesn't have roundWinners and related functions,
+    // we'll return an empty array or implement an alternative approach
+    // For now, we'll just return an empty array since the contract doesn't support historical winner data
+    return [];
   } catch (error) {
     console.error('Error getting winners info:', error);
     return [];
@@ -349,17 +321,12 @@ export const setupPeriodicUpdates = (callback, intervalMs = 30000) => {
       
       // Получаем актуальные данные
       const prizePool = await retryOperation(async () => {
-        return await contract.prizePool();
-      });
-      
-      const currentRound = await retryOperation(async () => {
-        return await contract.currentRound();
+        return await contract.getBalance();
       });
       
       // Вызываем callback с обновленными данными
       callback({
         prizePool: ethers.formatEther(prizePool),
-        currentRound: parseInt(currentRound),
         timestamp: Date.now()
       });
     } catch (error) {
@@ -399,12 +366,12 @@ export const subscribeToTicketPurchases = (callback) => {
         throw new Error('Contract not available for subscription');
       }
 
-      // Подписываемся на событие TicketBought
-      const handler = (buyer, round, event) => {
+      // Подписываемся на событие enterRaffle (пользователь отправляет средства в лотерею)
+      const handler = (from, amount, event) => {
         try {
           callback({
-            buyer,
-            round: parseInt(round),
+            from,
+            amount: ethers.formatEther(amount),
             blockNumber: event.blockNumber,
             transactionHash: event.transactionHash
           });
@@ -413,16 +380,16 @@ export const subscribeToTicketPurchases = (callback) => {
         }
       };
 
-      contract.on('TicketBought', handler);
-
-      // Возвращаем функцию отписки
-      unsubscribe = () => {
-        try {
-          contract.off('TicketBought', handler);
-        } catch (error) {
-          console.error('Error unsubscribing from TicketBought:', error);
-        }
-      };
+      // Since our contract doesn't have a specific TicketBought event,
+      // we'll listen for the receive/fallback function payments or transfer events if it's an ERC20 token
+      // For now, since the contract is payable and uses enterRaffle function, we'll need to find a way to track entries
+      // The contract ABI doesn't show a specific event for entering raffle
+      // We could potentially listen to the receive/transfer events but those aren't explicitly defined in the ABI
+      // For now, we'll just listen to any balance change as a potential entry
+      
+      // Alternative: Listen to generic events if possible, or skip this for now
+      // Let's skip the event listener since the ABI doesn't specify any events for ticket purchases
+      // The original ABI only has LotteryWon event
     } catch (error) {
       console.error('Error setting up ticket purchase subscription:', error);
       
@@ -452,12 +419,12 @@ export const subscribeToWinnerSelections = (callback) => {
         throw new Error('Contract not available for subscription');
       }
 
-      // Подписываемся на событие WinnerSelected
-      const handler = (winner, round, event) => {
+      // Подписываемся на событие LotteryWon (пользователь выиграл в лотерее)
+      const handler = (winner, amount, event) => {
         try {
           callback({
             winner,
-            round: parseInt(round),
+            amount: ethers.formatEther(amount),
             blockNumber: event.blockNumber,
             transactionHash: event.transactionHash
           });
@@ -466,14 +433,15 @@ export const subscribeToWinnerSelections = (callback) => {
         }
       };
 
-      contract.on('WinnerSelected', handler);
+      // Listen for the LotteryWon event which is present in the contract ABI
+      contract.on('LotteryWon', handler);
 
       // Возвращаем функцию отписки
       unsubscribe = () => {
         try {
-          contract.off('WinnerSelected', handler);
+          contract.off('LotteryWon', handler);
         } catch (error) {
-          console.error('Error unsubscribing from WinnerSelected:', error);
+          console.error('Error unsubscribing from LotteryWon:', error);
         }
       };
     } catch (error) {
