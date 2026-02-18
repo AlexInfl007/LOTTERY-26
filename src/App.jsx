@@ -16,21 +16,31 @@ import { ethers } from 'ethers';
 export default function App() {
   const { t } = useTranslation();
 
-  const [poolAmount, setPoolAmount] = useState(0); // Initialize as 0, will be updated from contract
+  const [poolAmount, setPoolAmount] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
   const poolTarget = 1000000;
-  const [ticketsBought, setTicketsBought] = useState(0); // Initialize as 0, will be updated from contract
-  const [myTickets, setMyTickets] = useState(0); // Initialize as 0, will be updated from contract
+  const [ticketsBought, setTicketsBought] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
+  const [myTickets, setMyTickets] = useState(0); // Initialize as 0, will be updated from contract when wallet is connected
   const [feed, setFeed] = useState([]);
-  const [winners, setWinners] = useState([]); // Initialize winners state
+  const [winners, setWinners] = useState(null); // Initialize winners state as null when wallet is not connected
   const [walletAddress, setWalletAddress] = useState(null);
   const [signer, setSigner] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize data from smart contract
+  // Initialize data from smart contract when wallet is connected
   useEffect(() => {
     let mounted = true;
     
     const initializeData = async () => {
+      // Check if wallet is connected
+      const currentProvider = await getCurrentProvider();
+      if (!currentProvider) {
+        // If no wallet connected, set loading to false and return
+        if (mounted) {
+          setLoading(false);
+        }
+        return;
+      }
+      
       try {
         // Wait for contract initialization (max 5 seconds)
         let attempts = 0;
@@ -100,9 +110,16 @@ export default function App() {
     };
   }, []);
 
-  // Periodically update the prize pool to reflect new contributions
+  // Periodically update the prize pool to reflect new contributions when wallet is connected
   useEffect(() => {
     const interval = setInterval(async () => {
+      // Check if wallet is connected before attempting to update
+      const currentProvider = await getCurrentProvider();
+      if (!currentProvider) {
+        // Skip update if no wallet connected
+        return;
+      }
+      
       try {
         const updatedPool = await readPrizePool();
         setPoolAmount(updatedPool);
@@ -200,15 +217,29 @@ export default function App() {
                 </div>
                 <div className={styles.roundLabel}>Round: 1</div>
               </div>
-              <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought}</div>
+              <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
             </div>
 
-            <PoolProgressBar current={poolAmount} goal={poolTarget} />
+            {poolAmount !== null ? (
+              <>
+                <PoolProgressBar current={poolAmount} goal={poolTarget} />
 
-            <div className={styles.description}>
-              <div className={styles.boldLine}>{t("collectingTo", "Собираем пул до")} {poolTarget.toLocaleString()} POL!</div>
-              <div className={styles.mutedLine}>{t("eachTicketIncreases", "Каждый билет увеличивает джекпот.")}</div>
-            </div>
+                <div className={styles.description}>
+                  <div className={styles.boldLine}>{t("collectingTo", "Собираем пул до")} {poolTarget.toLocaleString()} POL!</div>
+                  <div className={styles.mutedLine}>{t("eachTicketIncreases", "Каждый билет увеличивает джекпот.")}</div>
+                </div>
+              </>
+            ) : (
+              <div className={styles.placeholderContainer}>
+                <div className={styles.placeholderText}>Please connect wallet to view lottery data</div>
+              </div>
+            )}
+
+            {!walletAddress && (
+              <div className={styles.walletNotConnectedMessage}>
+                <p className={styles.connectPrompt}>Please connect your wallet to participate and view lottery data</p>
+              </div>
+            )}
 
             <div className={styles.actionRow}>
               <button 
@@ -222,14 +253,21 @@ export default function App() {
               <LuckyButton />
             </div>
 
-            <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {myTickets}</div>
+            <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {!walletAddress ? '*' : myTickets}</div>
           </section>
 
           <HowItWorks />
         </div>
 
         <div className={styles.rightColumn}>
-          <Winners winners={winners} />
+          {winners !== null ? (
+            <Winners winners={winners} />
+          ) : (
+            <div className={styles.winnersPlaceholder}>
+              <h4 className={styles.sideTitle}>🏆 {t("recentWinners", "Последние победители")}</h4>
+              <div className={styles.placeholderText}>Please connect wallet to view winners</div>
+            </div>
+          )}
 
           <div className={styles.sideCard}>
             <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
