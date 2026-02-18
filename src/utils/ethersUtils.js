@@ -38,14 +38,21 @@ export function updateContractInstance(newProvider) {
 // Function to get the current provider
 export async function getCurrentProvider() {
   if (!provider) {
-    // If no wallet provider, return our managed Polygon provider
-    return await getValidPolygonProvider();
+    // If no wallet provider, return null to indicate no connection
+    return null;
   }
   return provider;
 }
 
 // Function to get the current contract
 export async function getCurrentContract() {
+  // Check if we have a provider (wallet connected)
+  const currentProvider = await getCurrentProvider();
+  if (!currentProvider) {
+    // Return null if no provider (wallet not connected)
+    return null;
+  }
+  
   return await getContractAsync();
 }
 
@@ -91,6 +98,13 @@ async function handleRPCErrors(operation, operationName = 'RPC operation') {
 
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
 export async function readPrizePool() {
+  // Check if we have a provider (wallet connected)
+  const currentProvider = await getCurrentProvider();
+  if (!currentProvider) {
+    // Return null if no provider (wallet not connected)
+    return null;
+  }
+  
   return handleRPCErrors(async () => {
     const currentContract = await getContractInstance();
     if (!currentContract) {
@@ -280,6 +294,13 @@ export async function buyTicket(signer) {
 
 // Function to get connected wallet's tickets
 export async function getUserTickets(walletAddress) {
+  // Check if we have a provider (wallet connected)
+  const currentProvider = await getCurrentProvider();
+  if (!currentProvider) {
+    // Return 0 if no provider (wallet not connected)
+    return 0;
+  }
+  
   try {
     const currentContract = await getContractInstance();
     if (!currentContract) {
@@ -305,6 +326,13 @@ const winnerEventsCache = {
 
 // Function to get recent winners by querying the blockchain for LotteryWon events
 export async function getRecentWinners(forceRefresh = false) {
+  // Check if we have a provider (wallet connected)
+  const currentProvider = await getCurrentProvider();
+  if (!currentProvider) {
+    // Return null if no provider (wallet not connected)
+    return null;
+  }
+  
   return handleRPCErrors(async () => {
     // Use cache (valid for 30 seconds)
     const now = Date.now();

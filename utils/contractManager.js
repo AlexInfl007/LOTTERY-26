@@ -231,6 +231,11 @@ export const initializeContract = async (force = false) => {
   return initializationPromise;
 };
 
+// Function to check if contract is initialized with a valid provider
+export const isContractInitialized = () => {
+  return !!contractInstance && !!provider;
+};
+
 export const getContract = () => {
   return contractInstance;
 };
