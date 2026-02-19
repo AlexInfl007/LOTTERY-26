@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { getCurrentProvider } from './src/utils/ethersUtils';
+import { getCurrentProvider } from '../src/utils/ethersUtils';
 
 // Полный ABI контракта
 const CONTRACT_ABI = [
