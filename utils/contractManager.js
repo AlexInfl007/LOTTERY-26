@@ -154,6 +154,14 @@ const CONTRACT_ABI = [
 
 const CONTRACT_ADDRESS = "0xf90169AD413429af4AE0a3B8962648d4a3289011";
 
+// Fallback RPC URLs to avoid single point of failure
+const RPC_URLS = [
+  "https://polygon-rpc.com/",
+  "https://rpc.ankr.com/polygon",
+  "https://polygon.llamarpc.com",
+  "https://poly-rpc.gateway.pokt.network/"
+];
+
 let contractInstance = null;
 let initializationPromise = null;
 let provider = null;
@@ -177,7 +185,8 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
           error.message.includes('connection refused') ||
           error.message.includes('missing revert data') ||
           error.message.includes('CALL_EXCEPTION') ||
-          error.message.includes('could not coalesce')) {
+          error.message.includes('could not coalesce') ||
+          error.message.includes('insufficient funds')) {
         if (i < maxRetries - 1) {
           console.log(`Waiting ${delay}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -186,6 +195,37 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
         }
       }
       throw error;
+    }
+  }
+};
+
+// Функция для создания провайдера с резервными URL
+const createProviderWithFallback = async () => {
+  const currentProvider = await getCurrentProvider();
+  
+  // Если у нас есть пользовательский провайдер (кошелек подключен), используем его
+  if (currentProvider && currentProvider.connection) {
+    return currentProvider;
+  }
+  
+  // Иначе используем публичные RPC с резервным переключением
+  for (let i = 0; i < RPC_URLS.length; i++) {
+    try {
+      const provider = new ethers.JsonRpcProvider(RPC_URLS[i], 137, {
+        staticNetwork: true
+      });
+      
+      // Проверяем работоспособность провайдера
+      await provider.getBlockNumber();
+      console.log(`Provider initialized with ${RPC_URLS[i]}`);
+      return provider;
+    } catch (error) {
+      console.warn(`Failed to initialize provider with ${RPC_URLS[i]}:`, error.message);
+      if (i === RPC_URLS.length - 1) {
+        // Если это последняя попытка, выбрасываем ошибку
+        throw error;
+      }
+      // Продолжаем со следующим URL
     }
   }
 };
@@ -200,7 +240,8 @@ export const initializeContract = async (force = false) => {
     try {
       // Получаем провайдер с оберткой для повторных попыток
       const providerOperation = async () => {
-        const p = await getCurrentProvider();
+        // Используем функцию с резервным переключением между RPC
+        const p = await createProviderWithFallback();
         if (!p) {
           throw new Error('No provider available');
         }
@@ -269,7 +310,7 @@ export const getContractAsync = async () => {
     // Дополнительная проверка, что контракт все еще рабочий
     try {
       await retryOperation(async () => {
-        await contractInstance.prizePool();
+        await contractInstance.callStatic.prizePool();
       });
       return contractInstance;
     } catch (error) {
@@ -279,9 +320,9 @@ export const getContractAsync = async () => {
         return await initializeContract(true);
       } catch (reinitError) {
         console.error('Reinitialization failed:', reinitError);
-        // Если переинициализация также не удалась, пробуем использовать callStatic как резерв
+        // Если переинициализация также не удалась, пробуем использовать fallback
         try {
-          const provider = await getCurrentProvider();
+          const provider = await createProviderWithFallback();
           if (provider) {
             const fallbackContract = new ethers.Contract(
               CONTRACT_ADDRESS,
