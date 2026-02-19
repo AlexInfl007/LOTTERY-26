@@ -74,7 +74,9 @@ async function handleRPCErrors(operation, operationName = 'RPC operation') {
         error.message.includes('timeout') ||
         error.message.includes('ECONNRESET') ||
         error.message.includes('ENOTFOUND') ||
-        error.message.includes('missing revert data')) {
+        error.message.includes('missing revert data') ||
+        error.message.includes('CALL_EXCEPTION') ||
+        error.message.includes('could not coalesce')) {
       
       console.error(`${operationName} failed due to RPC error:`, error.message);
       throw error;
@@ -102,7 +104,9 @@ export async function readPrizePool() {
     }
     
     // Try using callStatic instead of direct contract call to avoid filter issues
-    const raw = await currentContract.callStatic.prizePool();
+    const raw = await handleRPCErrors(async () => {
+      return await currentContract.callStatic.prizePool();
+    }, 'readPrizePool');
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
@@ -301,8 +305,10 @@ export async function getUserTickets(walletAddress) {
       return 0;
     }
     
-    // Call the players mapping in the smart contract
-    const isPlayer = await currentContract.players(walletAddress);
+    // Call the players mapping in the smart contract with error handling
+    const isPlayer = await handleRPCErrors(async () => {
+      return await currentContract.callStatic.players(walletAddress);
+    }, 'getUserTickets');
     return isPlayer ? 1 : 0;
   } catch (error) {
     console.warn('getUserTickets failed:', error);
