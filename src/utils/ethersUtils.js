@@ -52,7 +52,12 @@ export async function getCurrentContract() {
     return null;
   }
   
-  return await getContractAsync();
+  try {
+    return await getContractAsync();
+  } catch (error) {
+    console.warn('getCurrentContract failed:', error);
+    return null;
+  }
 }
 
 // Helper function to handle RPC errors
@@ -76,7 +81,8 @@ async function handleRPCErrors(operation, operationName = 'RPC operation') {
         error.message.includes('ENOTFOUND') ||
         error.message.includes('missing revert data') ||
         error.message.includes('CALL_EXCEPTION') ||
-        error.message.includes('could not coalesce')) {
+        error.message.includes('could not coalesce') ||
+        error.message.includes('insufficient funds')) {
       
       console.error(`${operationName} failed due to RPC error:`, error.message);
       throw error;
@@ -89,14 +95,14 @@ async function handleRPCErrors(operation, operationName = 'RPC operation') {
 
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
 export async function readPrizePool() {
-  // Check if we have a provider (wallet connected)
-  const currentProvider = await getCurrentProvider();
-  if (!currentProvider) {
-    // Return null if no provider (wallet not connected)
-    return null;
-  }
-  
   try {
+    // Check if we have a provider (wallet connected)
+    const currentProvider = await getCurrentProvider();
+    if (!currentProvider) {
+      // Return null if no provider (wallet not connected)
+      return null;
+    }
+    
     const currentContract = await getContractInstance();
     if (!currentContract) {
       console.error('Contract not initialized');
@@ -291,14 +297,14 @@ export async function buyTicket(signer) {
 
 // Function to get connected wallet's tickets
 export async function getUserTickets(walletAddress) {
-  // Check if we have a provider (wallet connected)
-  const currentProvider = await getCurrentProvider();
-  if (!currentProvider) {
-    // Return 0 if no provider (wallet not connected)
-    return 0;
-  }
-  
   try {
+    // Check if we have a provider (wallet connected)
+    const currentProvider = await getCurrentProvider();
+    if (!currentProvider) {
+      // Return 0 if no provider (wallet not connected)
+      return 0;
+    }
+    
     const currentContract = await getContractInstance();
     if (!currentContract) {
       console.error('Contract not initialized');
@@ -318,14 +324,14 @@ export async function getUserTickets(walletAddress) {
 
 // Function to get tickets count with error handling
 export async function getTicketsCount() {
-  // Check if we have a provider (wallet connected)
-  const currentProvider = await getCurrentProvider();
-  if (!currentProvider) {
-    // Return null if no provider (wallet not connected)
-    return null;
-  }
-
   try {
+    // Check if we have a provider (wallet connected)
+    const currentProvider = await getCurrentProvider();
+    if (!currentProvider) {
+      // Return null if no provider (wallet not connected)
+      return null;
+    }
+
     const currentContract = await getContractInstance();
     if (!currentContract) {
       console.error('Contract not initialized');
