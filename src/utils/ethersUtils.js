@@ -73,7 +73,8 @@ async function handleRPCErrors(operation, operationName = 'RPC operation') {
         error.message.includes('connection refused') ||
         error.message.includes('timeout') ||
         error.message.includes('ECONNRESET') ||
-        error.message.includes('ENOTFOUND')) {
+        error.message.includes('ENOTFOUND') ||
+        error.message.includes('missing revert data')) {
       
       console.error(`${operationName} failed due to RPC error:`, error.message);
       throw error;
@@ -93,7 +94,7 @@ export async function readPrizePool() {
     return null;
   }
   
-  return handleRPCErrors(async () => {
+  try {
     const currentContract = await getContractInstance();
     if (!currentContract) {
       console.error('Contract not initialized');
@@ -105,7 +106,11 @@ export async function readPrizePool() {
     // ethers v6 returns BigInt; format as number
     const formatted = Number(ethers.formatEther(raw || 0));
     return formatted;
-  }, 'readPrizePool');
+  } catch (error) {
+    console.warn('readPrizePool failed:', error);
+    // Return 0 instead of throwing error to prevent breaking the UI
+    return 0;
+  }
 }
 
 // subscribe to enterRaffle events -> calls callback with readable message
@@ -300,7 +305,7 @@ export async function getUserTickets(walletAddress) {
     const isPlayer = await currentContract.players(walletAddress);
     return isPlayer ? 1 : 0;
   } catch (error) {
-    console.error('getUserTickets error:', error);
+    console.warn('getUserTickets failed:', error);
     return 0;
   }
 }
@@ -326,7 +331,7 @@ export async function getTicketsCount() {
     const formatted = Number(raw || 0);
     return formatted;
   } catch (error) {
-    console.error('Error getting tickets count:', error);
+    console.warn('getTicketsCount failed:', error);
     return 0; // Return 0 if the function doesn't exist or other error occurs
   }
 }
@@ -347,55 +352,53 @@ export async function getRecentWinners(forceRefresh = false) {
     return null;
   }
   
-  return handleRPCErrors(async () => {
-    // Use cache (valid for 30 seconds)
-    const now = Date.now();
-    if (!forceRefresh && 
-        winnerEventsCache.data && 
-        now - winnerEventsCache.timestamp < 30000) {
-      return winnerEventsCache.data;
-    }
-    
-    // If request is already in progress, return the existing promise
-    if (winnerEventsCache.promise) {
-      return winnerEventsCache.promise;
-    }
-    
-    winnerEventsCache.promise = new Promise(async (resolve) => {
-      try {
-        const currentContract = await getContractInstance();
-        if (!currentContract) {
-          console.error('Contract not initialized');
-          resolve([]);
-          return;
-        }
-        
-        // Since our contract doesn't have round-based winner tracking,
-        // we'll return an empty array as there's no way to get historical winners
-        // from the current contract ABI
-        const winners = [];
-        
-        // Update cache
-        winnerEventsCache.data = winners;
-        winnerEventsCache.timestamp = now;
-        
-        resolve(winners);
-      } catch (error) {
-        console.error('getRecentWinners error:', error);
-        
-        // On rate limit error, return cached data if available
-        if (error.message?.includes('rate limit') && winnerEventsCache.data) {
-          console.warn('Rate limit hit, returning cached data');
-          resolve(winnerEventsCache.data);
-        } else {
-          // Return empty array as fallback if there's an error
-          resolve([]);
-        }
-      } finally {
-        winnerEventsCache.promise = null;
-      }
-    });
-    
+  // Use cache (valid for 30 seconds)
+  const now = Date.now();
+  if (!forceRefresh && 
+      winnerEventsCache.data && 
+      now - winnerEventsCache.timestamp < 30000) {
+    return winnerEventsCache.data;
+  }
+  
+  // If request is already in progress, return the existing promise
+  if (winnerEventsCache.promise) {
     return winnerEventsCache.promise;
-  }, 'getRecentWinners');
+  }
+  
+  winnerEventsCache.promise = new Promise(async (resolve) => {
+    try {
+      const currentContract = await getContractInstance();
+      if (!currentContract) {
+        console.error('Contract not initialized');
+        resolve([]);
+        return;
+      }
+      
+      // Since our contract doesn't have round-based winner tracking,
+      // we'll return an empty array as there's no way to get historical winners
+      // from the current contract ABI
+      const winners = [];
+      
+      // Update cache
+      winnerEventsCache.data = winners;
+      winnerEventsCache.timestamp = now;
+      
+      resolve(winners);
+    } catch (error) {
+      console.warn('getRecentWinners failed:', error);
+      
+      // On rate limit error, return cached data if available
+      if (error.message?.includes('rate limit') && winnerEventsCache.data) {
+        console.warn('Rate limit hit, returning cached data');
+        resolve(winnerEventsCache.data);
+      } else {
+        // Return empty array as fallback if there's an error
+        resolve([]);
+      }
+    } finally {
+      winnerEventsCache.promise = null;
+    }
+  });
+  
+  return winnerEventsCache.promise;
 }
