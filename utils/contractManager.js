@@ -217,11 +217,15 @@ export const initializeContract = async (force = false) => {
       // Оборачиваем в try-catch для обработки специфических ошибок
       try {
         await retryOperation(async () => {
-          await contractInstance.prizePool();
+          // Используем callStatic для безопасного вызова без фильтрации
+          await contractInstance.callStatic.prizePool();
         });
       } catch (validationError) {
-        // Если возникает ошибка "missing revert data", все равно считаем контракт инициализированным
-        if (validationError.message && validationError.message.includes('missing revert data')) {
+        // Если возникает ошибка "missing revert data" или "CALL_EXCEPTION", все равно считаем контракт инициализированным
+        if (validationError.message && 
+            (validationError.message.includes('missing revert data') || 
+             validationError.message.includes('CALL_EXCEPTION') ||
+             validationError.message.includes('could not coalesce'))) {
           console.warn('Contract validation failed with revert data error, but proceeding with initialization:', validationError.message);
         } else {
           throw validationError; // Перебрасываем ошибку, если она другая
@@ -259,7 +263,29 @@ export const getContractAsync = async () => {
     } catch (error) {
       console.warn('Existing contract instance failed, reinitializing:', error);
       // Попробуем переинициализировать
-      return await initializeContract(true);
+      try {
+        return await initializeContract(true);
+      } catch (reinitError) {
+        console.error('Reinitialization failed:', reinitError);
+        // Если переинициализация также не удалась, пробуем использовать callStatic как резерв
+        try {
+          const provider = await getCurrentProvider();
+          if (provider) {
+            const fallbackContract = new ethers.Contract(
+              CONTRACT_ADDRESS,
+              CONTRACT_ABI,
+              provider
+            );
+            // Используем callStatic для безопасного вызова
+            await fallbackContract.callStatic.prizePool();
+            contractInstance = fallbackContract;
+            return contractInstance;
+          }
+        } catch (fallbackError) {
+          console.error('Fallback contract creation also failed:', fallbackError);
+          throw error; // Бросаем исходную ошибку, если все методы неудачны
+        }
+      }
     }
   }
   return await initializeContract();
@@ -336,7 +362,7 @@ export const setupPeriodicUpdates = (callback, intervalMs = 30000) => {
       
       // Получаем актуальные данные
       const prizePool = await retryOperation(async () => {
-        return await contract.prizePool();
+        return await contract.callStatic.prizePool();
       });
       
       // Вызываем callback с обновленными данными
