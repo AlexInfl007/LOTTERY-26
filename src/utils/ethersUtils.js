@@ -1,6 +1,5 @@
 import { ethers } from 'ethers';
 import { getContractAsync, getContract, initializeContract } from '../../utils/contractManager';
-import { getValidPolygonProvider, makePolygonRpcCall, getPolygonProvider } from './polygonProvider';
 
 // Using the new RPC manager for Polygon network
 let provider = null;
@@ -56,14 +55,14 @@ export async function getCurrentContract() {
   return await getContractAsync();
 }
 
-// Helper function to handle RPC errors and rotate providers
+// Helper function to handle RPC errors
 async function handleRPCErrors(operation, operationName = 'RPC operation') {
   try {
     return await operation();
   } catch (error) {
     console.warn(`${operationName} failed:`, error.message);
     
-    // Check if this is an RPC error that warrants trying another provider
+    // If it's an RPC-related error, rethrow for proper handling
     if (error.message.includes('401') || 
         error.message.includes('API key disabled') || 
         error.message.includes('tenant disabled') ||
@@ -76,19 +75,8 @@ async function handleRPCErrors(operation, operationName = 'RPC operation') {
         error.message.includes('ECONNRESET') ||
         error.message.includes('ENOTFOUND')) {
       
-      console.log(`Attempting to switch RPC provider due to error...`);
-      
-      // Switch to a new provider through our RPC manager
-      try {
-        const newProvider = await getValidPolygonProvider();
-        console.log(`${operationName} will retry with new provider`);
-        
-        // Retry the operation with the new provider
-        return await operation();
-      } catch (retryError) {
-        console.error(`${operationName} failed even with new provider:`, retryError.message);
-        throw retryError;
-      }
+      console.error(`${operationName} failed due to RPC error:`, error.message);
+      throw error;
     }
     
     // If it's not an RPC-related error, just rethrow
