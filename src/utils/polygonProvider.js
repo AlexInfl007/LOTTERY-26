@@ -1,33 +1,15 @@
 import { ethers } from 'ethers';
-import { rpcManager, initializeRpcConnection } from '../config/rpcConfig';
 
+// We'll use only the user's wallet provider as the main provider
 let polygonProvider = null;
 
 /**
- * Инициализировать провайдер Polygon с использованием надежного RPC-менеджера
+ * Initialize Polygon provider with user's wallet provider (should be called when wallet connects)
  */
-export const initializePolygonProvider = async () => {
+export const initializePolygonProvider = async (walletProvider) => {
   try {
-    // Инициализируем RPC-соединение (найдем первый работающий RPC)
-    await initializeRpcConnection();
-    
-    // Создаем провайдер ethers.js с текущим активным RPC
-    const currentRpcUrl = rpcManager.getCurrentRpcUrl();
-    polygonProvider = new ethers.JsonRpcProvider(currentRpcUrl);
-    
-    console.log(`Провайдер Polygon инициализирован с RPC: ${currentRpcUrl}`);
-    
-    // Добавляем обработчик событий для переподключения при ошибках
-    polygonProvider.on('error', async (error) => {
-      console.error('Ошибка провайдера Polygon:', error);
-      
-      // При ошибке переключаемся на следующий RPC и пересоздаем провайдер
-      const newRpcUrl = rpcManager.switchToNextRpc();
-      polygonProvider = new ethers.JsonRpcProvider(newRpcUrl);
-      
-      console.log(`Провайдер переключен на новый RPC: ${newRpcUrl}`);
-    });
-    
+    polygonProvider = walletProvider;
+    console.log('Провайдер Polygon инициализирован с провайдером кошелька пользователя');
     return polygonProvider;
   } catch (error) {
     console.error('Ошибка при инициализации провайдера Polygon:', error);
@@ -36,21 +18,49 @@ export const initializePolygonProvider = async () => {
 };
 
 /**
- * Получить текущий провайдер Polygon
+ * Get current Polygon provider
  */
 export const getPolygonProvider = () => {
   if (!polygonProvider) {
-    throw new Error('Провайдер Polygon не инициализирован. Вызовите initializePolygonProvider() сначала.');
+    // Return null if no wallet connected
+    return null;
   }
   return polygonProvider;
 };
 
 /**
- * Функция для выполнения RPC-вызовов через наш менеджер и преобразования для ethers.js
+ * Function to make RPC calls through the user's wallet provider
  */
 export const makePolygonRpcCall = async (method, params = []) => {
+  if (!polygonProvider) {
+    throw new Error('Провайдер Polygon не инициализирован. Подключите кошелек пользователя.');
+  }
+  
   try {
-    return await rpcManager.makeRpcCall(method, params);
+    const response = await fetch(polygonProvider.connection.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method,
+        params
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(`RPC error: ${data.error.message}`);
+    }
+
+    return data.result;
   } catch (error) {
     console.error('Ошибка при выполнении RPC-вызова Polygon:', error);
     throw error;
@@ -58,25 +68,12 @@ export const makePolygonRpcCall = async (method, params = []) => {
 };
 
 /**
- * Функция для получения провайдера с автоматической проверкой и восстановлением соединения
+ * Function to get provider with automatic checking and recovery
  */
 export const getValidPolygonProvider = async () => {
   if (!polygonProvider) {
-    return await initializePolygonProvider();
+    throw new Error('Провайдер Polygon не инициализирован. Подключите кошелек пользователя.');
   }
-
-  try {
-    // Проверяем соединение, запросив номер последнего блока
-    await polygonProvider.getBlockNumber();
-    return polygonProvider;
-  } catch (error) {
-    console.warn('Текущий провайдер Polygon недоступен, переключаемся...', error);
-    
-    // Переключаемся на следующий RPC и создаем нового провайдера
-    const newRpcUrl = rpcManager.switchToNextRpc();
-    polygonProvider = new ethers.JsonRpcProvider(newRpcUrl);
-    
-    console.log(`Провайдер пересоздан с новым RPC: ${newRpcUrl}`);
-    return polygonProvider;
-  }
+  
+  return polygonProvider;
 };
