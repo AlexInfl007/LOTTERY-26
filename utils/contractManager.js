@@ -166,7 +166,7 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
     } catch (error) {
       console.warn(`RPC operation failed, attempt ${i + 1}/${maxRetries}:`, error.message);
       
-      // Проверяем, является ли ошибка связанной с RPC
+      // Проверяем, является ли ошибка связанной с RPC или контрактом
       if (error.message.includes('401') || 
           error.message.includes('API key disabled') || 
           error.message.includes('tenant disabled') ||
@@ -174,7 +174,10 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
           error.message.includes('too many requests') || 
           error.message.includes('server error') ||
           error.message.includes('network error') ||
-          error.message.includes('connection refused')) {
+          error.message.includes('connection refused') ||
+          error.message.includes('missing revert data') ||
+          error.message.includes('CALL_EXCEPTION') ||
+          error.message.includes('could not coalesce')) {
         if (i < maxRetries - 1) {
           console.log(`Waiting ${delay}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -265,7 +268,9 @@ export const getContractAsync = async () => {
   if (contractInstance) {
     // Дополнительная проверка, что контракт все еще рабочий
     try {
-      await contractInstance.prizePool();
+      await retryOperation(async () => {
+        await contractInstance.prizePool();
+      });
       return contractInstance;
     } catch (error) {
       console.warn('Existing contract instance failed, reinitializing:', error);
@@ -283,8 +288,10 @@ export const getContractAsync = async () => {
               CONTRACT_ABI,
               provider
             );
-            // Используем callStatic для безопасного вызова
-            await fallbackContract.callStatic.prizePool();
+            // Используем callStatic для безопасного вызова с повторными попытками
+            await retryOperation(async () => {
+              await fallbackContract.callStatic.prizePool();
+            });
             contractInstance = fallbackContract;
             return contractInstance;
           }
