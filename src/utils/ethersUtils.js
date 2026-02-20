@@ -19,6 +19,8 @@ export async function getContractInstance(customProvider = null) {
     return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, customProvider);
   }
   
+  // Make sure the contract is properly initialized with the current provider
+  await initializeContract(true);
   // Use the contract manager to get the properly initialized contract
   return await getContractAsync();
 }
@@ -53,6 +55,8 @@ export async function getCurrentContract() {
   }
   
   try {
+    // Make sure the contract is properly initialized with the current provider
+    await initializeContract(true);
     return await getContractAsync();
   } catch (error) {
     console.warn('getCurrentContract failed:', error);
@@ -103,7 +107,7 @@ export async function readPrizePool() {
       return null;
     }
     
-    const currentContract = await getContractInstance();
+    const currentContract = await getCurrentContract();
     if (!currentContract) {
       console.error('Contract not initialized');
       return 0;
@@ -125,7 +129,7 @@ export async function readPrizePool() {
 
 // subscribe to enterRaffle events -> calls callback with readable message
 export async function watchTicketEvents(onEvent) {
-  const currentContract = await getContractInstance();
+  const currentContract = await getCurrentContract();
   if (!currentContract) {
     console.error('Contract not initialized for watchTicketEvents');
     return () => {}; // Return empty unsubscriber
@@ -153,7 +157,7 @@ export async function watchTicketEvents(onEvent) {
 // Subscribe to LotteryWon events to keep track of winners
 export async function watchWinnerEvents(onWinner) {
   return handleRPCErrors(async () => {
-    const currentContract = await getContractInstance();
+    const currentContract = await getCurrentContract();
     if (!currentContract) {
       console.error('Contract not initialized for watchWinnerEvents');
       return () => {}; // Return empty unsubscriber
@@ -235,7 +239,7 @@ export async function watchWinnerEvents(onWinner) {
 
 // Subscribe to PrizePool updates to keep track of the pool amount
 export async function watchPrizePoolUpdates(onUpdate) {
-  const currentContract = await getContractInstance();
+  const currentContract = await getCurrentContract();
   if (!currentContract) {
     console.error('Contract not initialized for watchPrizePoolUpdates');
     return () => {}; // Return empty unsubscriber
@@ -308,7 +312,7 @@ export async function getUserTickets(walletAddress) {
       return 0;
     }
     
-    const currentContract = await getContractInstance();
+    const currentContract = await getCurrentContract();
     if (!currentContract) {
       console.error('Contract not initialized');
       return 0;
@@ -336,7 +340,7 @@ export async function getTicketsCount() {
       return null;
     }
 
-    const currentContract = await getContractInstance();
+    const currentContract = await getCurrentContract();
     if (!currentContract) {
       console.error('Contract not initialized');
       return 0;
@@ -383,7 +387,7 @@ export async function getRecentWinners(forceRefresh = false) {
   
   winnerEventsCache.promise = new Promise(async (resolve) => {
     try {
-      const currentContract = await getContractInstance();
+      const currentContract = await getCurrentContract();
       if (!currentContract) {
         console.error('Contract not initialized');
         resolve([]);

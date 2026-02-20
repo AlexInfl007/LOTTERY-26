@@ -203,6 +203,23 @@ const getProvider = async () => {
   return currentProvider;
 };
 
+// Функция для проверки доступности провайдера
+const isProviderAvailable = async () => {
+  try {
+    const currentProvider = await getCurrentProvider();
+    if (!currentProvider) {
+      return false;
+    }
+    
+    // Проверяем, что провайдер может выполнить базовые операции
+    await currentProvider.getNetwork();
+    return true;
+  } catch (error) {
+    console.warn('Provider availability check failed:', error.message);
+    return false;
+  }
+};
+
 export const initializeContract = async (force = false) => {
   // Если уже инициализируется, возвращаем существующий промис
   if (initializationPromise && !force && !isInitializing) {
@@ -211,7 +228,15 @@ export const initializeContract = async (force = false) => {
   
   // Если контракт уже инициализирован и не force, возвращаем существующий экземпляр
   if (contractInstance && provider && !force) {
-    return Promise.resolve(contractInstance);
+    // Проверяем, что провайдер все еще доступен
+    const providerAvailable = await isProviderAvailable();
+    if (providerAvailable) {
+      return Promise.resolve(contractInstance);
+    } else {
+      // Если провайдер больше не доступен, сбрасываем состояние
+      contractInstance = null;
+      provider = null;
+    }
   }
   
   // Устанавливаем флаг инициализации
@@ -268,10 +293,15 @@ export const getContract = () => {
 };
 
 export const getContractAsync = async () => {
-  // Убедимся, что контракт инициализирован перед использованием
-  await initializeContract();
+  // Проверяем, что провайдер все еще доступен
+  const providerAvailable = await isProviderAvailable();
   
-  // Проверяем, что провайдер все еще доступен и действителен
+  // Если нет провайдера или контракт не инициализирован, инициализируем заново
+  if (!providerAvailable || !contractInstance) {
+    await initializeContract(true);
+  }
+  
+  // Проверяем, что провайдер все еще доступен после инициализации
   const currentProvider = await getProvider();
   if (!currentProvider) {
     throw new Error('No provider available - please connect your wallet');
