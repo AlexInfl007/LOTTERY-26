@@ -154,13 +154,7 @@ const CONTRACT_ABI = [
 
 const CONTRACT_ADDRESS = "0xf90169AD413429af4AE0a3B8962648d4a3289011";
 
-// Fallback RPC URLs to avoid single point of failure
-const RPC_URLS = [
-  "https://polygon-rpc.com/",
-  "https://rpc.ankr.com/polygon",
-  "https://polygon.llamarpc.com",
-  "https://poly-rpc.gateway.pokt.network/"
-];
+// No fallback RPC URLs - only use the user's wallet provider
 
 // Глобальное состояние для контракта
 let contractInstance = null;
@@ -201,17 +195,12 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
   }
 };
 
-// Функция для получения провайдера - приоритет всегда отдается кошельку пользователя
+// Функция для получения провайдера - только кошелек пользователя
 const getProvider = async () => {
   const currentProvider = await getCurrentProvider();
   
-  // Всегда возвращаем провайдер кошелька, если он подключен
-  if (currentProvider) {
-    return currentProvider;
-  }
-  
-  // Если кошелек не подключен, возвращаем null
-  return null;
+  // Возвращаем только провайдер кошелька пользователя, иначе null
+  return currentProvider;
 };
 
 export const initializeContract = async (force = false) => {
