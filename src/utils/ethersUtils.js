@@ -314,11 +314,12 @@ export async function getUserTickets(walletAddress) {
       return 0;
     }
     
-    // Call the players mapping in the smart contract with error handling
-    const isPlayer = await handleRPCErrors(async () => {
-      return await currentContract.callStatic.players(walletAddress);
+    // Call the ticketsOf function in the smart contract with error handling
+    const ticketCount = await handleRPCErrors(async () => {
+      return await currentContract.callStatic.ticketsOf(walletAddress);
     }, 'getUserTickets');
-    return isPlayer ? 1 : 0;
+    // Convert BigInt to number
+    return Number(ticketCount || 0);
   } catch (error) {
     console.warn('getUserTickets failed:', error);
     return 0;
