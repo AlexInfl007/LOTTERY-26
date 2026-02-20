@@ -162,9 +162,11 @@ const RPC_URLS = [
   "https://poly-rpc.gateway.pokt.network/"
 ];
 
+// Глобальное состояние для контракта
 let contractInstance = null;
 let initializationPromise = null;
 let provider = null;
+let isInitializing = false; // Добавляем флаг для предотвращения параллельной инициализации
 
 // Обработка ошибок RPC и повторные попытки
 const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
@@ -214,9 +216,17 @@ const getProvider = async () => {
 
 export const initializeContract = async (force = false) => {
   // Если уже инициализируется, возвращаем существующий промис
-  if (initializationPromise && !force) {
+  if (initializationPromise && !force && !isInitializing) {
     return initializationPromise;
   }
+  
+  // Если контракт уже инициализирован и не force, возвращаем существующий экземпляр
+  if (contractInstance && provider && !force) {
+    return Promise.resolve(contractInstance);
+  }
+  
+  // Устанавливаем флаг инициализации
+  isInitializing = true;
   
   initializationPromise = new Promise(async (resolve, reject) => {
     try {
@@ -247,6 +257,9 @@ export const initializeContract = async (force = false) => {
     } catch (error) {
       console.error('Failed to initialize contract:', error);
       reject(error);
+    } finally {
+      // Сбрасываем флаг инициализации
+      isInitializing = false;
     }
   });
   
@@ -263,21 +276,28 @@ export const getContract = () => {
 };
 
 export const getContractAsync = async () => {
-  // Всегда используем провайдер кошелька пользователя
-  const p = await getProvider();
-  if (!p) {
+  // Если контракт не инициализирован, инициализируем его
+  if (!contractInstance || !provider) {
+    return await initializeContract();
+  }
+  
+  // Проверяем, что провайдер все еще доступен и действителен
+  const currentProvider = await getProvider();
+  if (!currentProvider) {
     throw new Error('No provider available - please connect your wallet');
   }
   
   // Обновляем провайдер в случае, если он изменился
-  provider = p;
-  
-  // Создаем новый экземпляр контракта с провайдером кошелька
-  contractInstance = new ethers.Contract(
-    CONTRACT_ADDRESS,
-    CONTRACT_ABI,
-    provider
-  );
+  if (currentProvider !== provider) {
+    provider = currentProvider;
+    
+    // Обновляем экземпляр контракта с новым провайдером
+    contractInstance = new ethers.Contract(
+      CONTRACT_ADDRESS,
+      CONTRACT_ABI,
+      provider
+    );
+  }
   
   return contractInstance;
 };
