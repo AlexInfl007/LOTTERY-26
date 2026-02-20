@@ -1,5 +1,5 @@
 import { ethers } from 'ethers';
-import { getContractAsync, getContract, initializeContract } from '../../utils/contractManager';
+import { getContractAsync, getContract, initializeContract, getContractWithSigner } from '../../utils/contractManager';
 
 // Using the new RPC manager for Polygon network
 let provider = null;
@@ -252,9 +252,12 @@ export async function watchPrizePoolUpdates(onUpdate) {
 // Function to buy a ticket
 export async function buyTicket(signer) {
   try {
-    // Import contract details dynamically to ensure they're available
-    const contractModule = await import('./contract');
-    const contractWithSigner = new ethers.Contract(contractModule.CONTRACT_ADDRESS, contractModule.CONTRACT_ABI, signer);
+    // Use the contract manager to get the contract with signer
+    const contractWithSigner = await getContractWithSigner(signer);
+    
+    if (!contractWithSigner) {
+      throw new Error('Contract not initialized with signer');
+    }
     
     // First, check if the user has enough balance
     const userAddress = await signer.getAddress();
