@@ -261,14 +261,15 @@ export const isContractInitialized = () => {
 };
 
 export const getContract = () => {
+  if (!contractInstance) {
+    throw new Error('Contract not initialized. Please call initializeContract() first.');
+  }
   return contractInstance;
 };
 
 export const getContractAsync = async () => {
-  // Если контракт не инициализирован, инициализируем его
-  if (!contractInstance || !provider) {
-    return await initializeContract();
-  }
+  // Убедимся, что контракт инициализирован перед использованием
+  await initializeContract();
   
   // Проверяем, что провайдер все еще доступен и действителен
   const currentProvider = await getProvider();
@@ -293,6 +294,9 @@ export const getContractAsync = async () => {
 
 export const getContractWithSigner = async (signer) => {
   try {
+    // Убедимся, что контракт инициализирован перед использованием
+    await initializeContract();
+    
     if (!signer) {
       // Получаем провайдер кошелька пользователя
       const provider = await getProvider();
