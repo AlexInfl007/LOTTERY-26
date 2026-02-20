@@ -199,35 +199,17 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
   }
 };
 
-// Функция для создания провайдера с резервными URL
-const createProviderWithFallback = async () => {
+// Функция для получения провайдера - приоритет всегда отдается кошельку пользователя
+const getProvider = async () => {
   const currentProvider = await getCurrentProvider();
   
-  // Если у нас есть пользовательский провайдер (кошелек подключен), используем его
-  if (currentProvider && currentProvider.connection) {
+  // Всегда возвращаем провайдер кошелька, если он подключен
+  if (currentProvider) {
     return currentProvider;
   }
   
-  // Иначе используем публичные RPC с резервным переключением
-  for (let i = 0; i < RPC_URLS.length; i++) {
-    try {
-      const provider = new ethers.JsonRpcProvider(RPC_URLS[i], 137, {
-        staticNetwork: true
-      });
-      
-      // Проверяем работоспособность провайдера
-      await provider.getBlockNumber();
-      console.log(`Provider initialized with ${RPC_URLS[i]}`);
-      return provider;
-    } catch (error) {
-      console.warn(`Failed to initialize provider with ${RPC_URLS[i]}:`, error.message);
-      if (i === RPC_URLS.length - 1) {
-        // Если это последняя попытка, выбрасываем ошибку
-        throw error;
-      }
-      // Продолжаем со следующим URL
-    }
-  }
+  // Если кошелек не подключен, возвращаем null
+  return null;
 };
 
 export const initializeContract = async (force = false) => {
@@ -238,17 +220,12 @@ export const initializeContract = async (force = false) => {
   
   initializationPromise = new Promise(async (resolve, reject) => {
     try {
-      // Получаем провайдер с оберткой для повторных попыток
-      const providerOperation = async () => {
-        // Используем функцию с резервным переключением между RPC
-        const p = await createProviderWithFallback();
-        if (!p) {
-          throw new Error('No provider available');
-        }
-        return p;
-      };
-      
-      provider = await retryOperation(providerOperation);
+      // Получаем провайдер кошелька пользователя
+      const p = await getProvider();
+      if (!p) {
+        throw new Error('No provider available - please connect your wallet');
+      }
+      provider = p;
       
       // Создаем экземпляр контракта
       contractInstance = new ethers.Contract(
@@ -257,39 +234,19 @@ export const initializeContract = async (force = false) => {
         provider
       );
       
-      // Проверяем, что контракт отвечает, с повторными попытками
-      // Оборачиваем в try-catch для обработки специфических ошибок
+      // Проверяем, что контракт отвечает
       try {
-        await retryOperation(async () => {
-          // Используем callStatic для безопасного вызова без фильтрации
-          await contractInstance.callStatic.prizePool();
-        });
+        await contractInstance.callStatic.prizePool();
       } catch (validationError) {
-        // Если возникает ошибка "missing revert data", "CALL_EXCEPTION", или 401 Unauthorized, все равно считаем контракт инициализированным
-        if (validationError.message && 
-            (validationError.message.includes('missing revert data') || 
-             validationError.message.includes('CALL_EXCEPTION') ||
-             validationError.message.includes('could not coalesce') ||
-             validationError.message.includes('401'))) {
-          console.warn('Contract validation failed with revert data error or unauthorized access, but proceeding with initialization:', validationError.message);
-        } else {
-          throw validationError; // Перебрасываем ошибку, если она другая
-        }
+        console.warn('Contract validation failed:', validationError.message);
+        // Не прерываем инициализацию, если контракт недоступен по какой-либо причине
       }
       
-      console.log('Contract initialized successfully');
+      console.log('Contract initialized successfully with user wallet provider');
       resolve(contractInstance);
     } catch (error) {
-      console.error('Failed to initialize contract after retries:', error);
-      // Even if initialization fails, we still want to proceed with the contract instance if possible
-      if (contractInstance) {
-        console.warn('Proceeding with existing contract instance despite initialization error');
-        resolve(contractInstance);
-      } else {
-        contractInstance = null;
-        provider = null;
-        reject(error);
-      }
+      console.error('Failed to initialize contract:', error);
+      reject(error);
     }
   });
   
@@ -306,56 +263,34 @@ export const getContract = () => {
 };
 
 export const getContractAsync = async () => {
-  if (contractInstance) {
-    // Дополнительная проверка, что контракт все еще рабочий
-    try {
-      await retryOperation(async () => {
-        await contractInstance.callStatic.prizePool();
-      });
-      return contractInstance;
-    } catch (error) {
-      console.warn('Existing contract instance failed, reinitializing:', error);
-      // Попробуем переинициализировать
-      try {
-        return await initializeContract(true);
-      } catch (reinitError) {
-        console.error('Reinitialization failed:', reinitError);
-        // Если переинициализация также не удалась, пробуем использовать fallback
-        try {
-          const provider = await createProviderWithFallback();
-          if (provider) {
-            const fallbackContract = new ethers.Contract(
-              CONTRACT_ADDRESS,
-              CONTRACT_ABI,
-              provider
-            );
-            // Используем callStatic для безопасного вызова с повторными попытками
-            await retryOperation(async () => {
-              await fallbackContract.callStatic.prizePool();
-            });
-            contractInstance = fallbackContract;
-            return contractInstance;
-          }
-        } catch (fallbackError) {
-          console.error('Fallback contract creation also failed:', fallbackError);
-          // Если все методы неудачны, все равно возвращаем существующий экземпляр контракта вместо выбрасывания ошибки
-          console.warn('Returning existing contract instance despite errors');
-          return contractInstance;
-        }
-      }
-    }
+  // Всегда используем провайдер кошелька пользователя
+  const p = await getProvider();
+  if (!p) {
+    throw new Error('No provider available - please connect your wallet');
   }
-  return await initializeContract();
+  
+  // Обновляем провайдер в случае, если он изменился
+  provider = p;
+  
+  // Создаем новый экземпляр контракта с провайдером кошелька
+  contractInstance = new ethers.Contract(
+    CONTRACT_ADDRESS,
+    CONTRACT_ABI,
+    provider
+  );
+  
+  return contractInstance;
 };
 
 export const getContractWithSigner = async (signer) => {
   try {
     if (!signer) {
-      // Если подписан не предоставлен, пробуем получить его из провайдера
-      const provider = getCurrentProvider();
-      if (!provider || !provider.getSigner) {
-        throw new Error('No signer available');
+      // Получаем провайдер кошелька пользователя
+      const provider = await getProvider();
+      if (!provider) {
+        throw new Error('No provider available - please connect your wallet');
       }
+      // Получаем signer из провайдера кошелька
       signer = await provider.getSigner();
     }
     
