@@ -7,7 +7,7 @@ export default defineConfig({
     host: true,
     port: 5173,
     headers: {
-      'Content-Security-Policy': "script-src 'self' 'unsafe-eval'; object-src 'none';"
+      'Content-Security-Policy': "script-src 'self'; object-src 'none';"
     }
   },
   build: {
