@@ -1,72 +1,58 @@
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-*.o
-*.obj
-dist/
-build/
-target/
-
+```gitignore
 # Dependencies
 node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
 venv/
 .venv/
+.ENV
+.ENV.*
+.venv.bak/
+env.bak/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+
+# Environment specific
 .env
 .env.local
 .env.*
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
-# Editors
+# IDE
 .vscode/
 .idea/
-
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
-# Distribution / packaging
-*.tar.gz
-*.whl
-*.egg
-*.egg-info/
-
-# OS generated files
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
 
-# MyPy cache
-.mypy_cache/
-# PyTest cache
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# Testing
 .pytest_cache/
+.mypy_cache/
+.nyc_output/
+coverage/
 
-# Gradle
-.gradle/
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+# Distribution / packaging
+.pybuild/
+.tox/
+.coverage*
+nosetests.xml
+```

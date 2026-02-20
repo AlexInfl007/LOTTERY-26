@@ -8,21 +8,20 @@ import { initializePolygonProvider } from '../utils/polygonProvider';
 
 // Helper function to detect all available providers
 function getAllProviders() {
-  if (typeof window === 'undefined') {
-    return [];
-  }
-
-  if (!window.ethereum) {
+  if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') {
     return [];
   }
 
   // Check if multiple providers exist
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-    return window.ethereum.providers;
+    return window.ethereum.providers.filter(provider => {
+      // Only return providers that seem functional
+      return provider && (provider.isMetaMask || provider.isCoinbaseWallet || provider.isTrustWallet || provider.request);
+    });
   }
 
-  // Return single provider as array
-  if (window.ethereum) {
+  // Return single provider if it appears to be functional
+  if (window.ethereum && (window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet || window.ethereum.isTrustWallet || window.ethereum.request)) {
     return [window.ethereum];
   }
 
@@ -37,9 +36,12 @@ const waitForEthereum = async (timeout = 5000) => {
     if (typeof window !== 'undefined' && window.ethereum) {
       // Check if providers are available
       if (window.ethereum.providers && window.ethereum.providers.length > 0) {
-        return window.ethereum.providers;
+        return window.ethereum.providers.filter(provider => {
+          // Only return providers that seem functional
+          return provider && (provider.isMetaMask || provider.isCoinbaseWallet || provider.isTrustWallet || provider.request);
+        });
       }
-      if (window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet || window.ethereum.request) {
+      if (window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet || window.ethereum.isTrustWallet || window.ethereum.request) {
         return [window.ethereum];
       }
     }
@@ -50,7 +52,7 @@ const waitForEthereum = async (timeout = 5000) => {
 
 // Helper function to detect the preferred provider among multiple wallets
 function getPreferredProvider() {
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') {
     return null;
   }
 
@@ -64,6 +66,11 @@ function getPreferredProvider() {
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
     // Multiple providers detected
     for (const provider of window.ethereum.providers) {
+      // Check if provider seems functional before prioritizing
+      if (!provider || !(provider.isMetaMask || provider.isCoinbaseWallet || provider.isTrustWallet || provider.request)) {
+        continue; // Skip non-functional providers
+      }
+      
       // Prioritize MetaMask over other wallets
       if (provider.isMetaMask && !provider.isBraveWallet && !provider.isTokenary && !provider.isAvalanche && !provider.isBitKeep) {
         return provider;
@@ -72,6 +79,11 @@ function getPreferredProvider() {
     
     // Then check for other known providers
     for (const provider of window.ethereum.providers) {
+      // Check if provider seems functional
+      if (!provider || !(provider.isCoinbaseWallet || provider.isTrustWallet || provider.isBraveWallet || provider.isTokenary || provider.isAvalanche || provider.isBitKeep)) {
+        continue; // Skip non-functional providers
+      }
+      
       if (provider.isCoinbaseWallet) return provider;
       if (provider.isTrustWallet) return provider;
       if (provider.isBraveWallet) return provider;
@@ -80,8 +92,14 @@ function getPreferredProvider() {
       if (provider.isBitKeep) return provider;
     }
     
-    // Fallback to first available provider
-    return window.ethereum.providers[0];
+    // Fallback to first available provider that seems functional
+    for (const provider of window.ethereum.providers) {
+      if (provider && (provider.isMetaMask || provider.isCoinbaseWallet || provider.isTrustWallet || provider.isBraveWallet || provider.isTokenary || provider.isAvalanche || provider.isBitKeep || provider.request)) {
+        return provider;
+      }
+    }
+    
+    return null;
   }
 
   // Single provider case - check for specific wallet types
@@ -90,6 +108,9 @@ function getPreferredProvider() {
   if (window.ethereum.isTrustWallet) return window.ethereum;
   if (window.ethereum.isBraveWallet) return window.ethereum;
   
+  // Check for other wallet types that might not have specific properties
+  if (window.ethereum.request) return window.ethereum;
+  
   // Fallback to default provider
   return window.ethereum;
 }
@@ -97,7 +118,7 @@ function getPreferredProvider() {
 // Function to wait for wallet to be ready
 async function waitForWalletReady() {
   return new Promise((resolve) => {
-    if (window.ethereum && window.ethereum.isMetaMask) {
+    if (window.ethereum && (window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet || window.ethereum.isTrustWallet || window.ethereum.request)) {
       resolve();
     } else if (window.ethereum && window.ethereum.providers) {
       resolve();
@@ -106,7 +127,7 @@ async function waitForWalletReady() {
       let attempts = 0;
       const checkWallet = () => {
         attempts++;
-        if (window.ethereum && (window.ethereum.isMetaMask || window.ethereum.providers)) {
+        if (window.ethereum && (window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet || window.ethereum.isTrustWallet || window.ethereum.request || window.ethereum.providers)) {
           resolve();
         } else if (attempts < 10) {
           setTimeout(checkWallet, 200);
@@ -251,6 +272,16 @@ export default function WalletConnect({ onConnect }) {
         // On desktop, suggest installing MetaMask or other wallet extension
         alert("Please install a crypto wallet like MetaMask, Trust Wallet, or Coinbase Wallet. Then refresh the page to connect.");
       }
+      return;
+    }
+
+    // Verify that the provider is responsive before attempting connection
+    try {
+      await ethereum.request({ method: 'eth_chainId' });
+    } catch (error) {
+      setCheckingWallet(false);
+      console.error("Wallet provider is not responding:", error);
+      alert("Wallet provider is not responding. Please make sure your wallet is unlocked and ready before connecting.");
       return;
     }
 
