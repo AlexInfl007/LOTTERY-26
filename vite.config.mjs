@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true,
-    port: 5173
+    port: 5173,
+    headers: {
+      'Content-Security-Policy': "script-src 'self' 'unsafe-eval'; object-src 'none';"
+    }
   },
   build: {
     outDir: 'dist',
