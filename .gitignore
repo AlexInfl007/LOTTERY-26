@@ -9,17 +9,22 @@ build/
 target/
 
 # Dependencies
-node_modules/
-venv/
 .venv/
-.env
-.env.local
-*.env.*
+venv/
+node_modules/
+.julia/
+zig*/
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
+*.swo
+
+# Environment
+.env
+.env.local
+*.env.*
 
 # Editors
 .vscode/
@@ -27,7 +32,7 @@ venv/
 *.swp
 *.swo
 
-# OS
+# System files
 .DS_Store
 Thumbs.db
 
@@ -37,17 +42,12 @@ htmlcov/
 .coverage
 
 # Python specific
-*.pyc
-__pycache__/
 .mypy_cache/
 .pytest_cache/
 
-# Node specific
-node_modules/
-
-# Java/Maven/Gradle
-target/
+# Java/Gradle
 .gradle/
+*.class
 
 # Compressed files
 *.zip
@@ -68,4 +68,8 @@ target/
 *.Z
 *.lz
 *.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
