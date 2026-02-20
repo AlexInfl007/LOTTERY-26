@@ -9,7 +9,21 @@ let polygonProvider = null;
 export const initializePolygonProvider = async (walletProvider) => {
   try {
     polygonProvider = walletProvider;
-    console.log('Провайдер Polygon инициализирован с провайдером кошелька пользователя');
+    
+    // Test the provider with a basic call to ensure it's working
+    try {
+      // Get network info to verify the provider works
+      const network = await polygonProvider.getNetwork();
+      console.log('Провайдер Polygon инициализирован с провайдером кошелька пользователя. Сеть:', network.name || network.chainId);
+      
+      // Additional test: get block number to ensure full functionality
+      const blockNumber = await polygonProvider.getBlockNumber();
+      console.log('Тестовый номер блока:', blockNumber);
+    } catch (testError) {
+      console.warn('Предупреждение: ошибка при тестировании провайдера Polygon:', testError);
+      // Don't throw here as some wallets might have restrictions on certain methods
+    }
+    
     return polygonProvider;
   } catch (error) {
     console.error('Ошибка при инициализации провайдера Polygon:', error);
@@ -73,6 +87,15 @@ export const makePolygonRpcCall = async (method, params = []) => {
 export const getValidPolygonProvider = async () => {
   if (!polygonProvider) {
     throw new Error('Провайдер Polygon не инициализирован. Подключите кошелек пользователя.');
+  }
+  
+  // Test if provider is still responsive
+  try {
+    // Check if provider is responsive by making a quick call
+    await polygonProvider.getBlockNumber();
+  } catch (error) {
+    console.warn('Провайдер Polygon не отвечает:', error);
+    throw new Error('Провайдер Polygon не отвечает. Проверьте подключение кошелька.');
   }
   
   return polygonProvider;
