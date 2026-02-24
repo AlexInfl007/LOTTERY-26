@@ -1,1 +1,43 @@
-Nothing should be ignored based on the provided file changes. The only modified file is `utils/contractManager.js`, which is a source code file and should not be ignored. There are no build artifacts, dependencies, or temporary files in the changes that would warrant adding ignore rules.
+```
+# Dependencies
+node_modules/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css
+*.bundle.js
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Local configuration
+config.local.json
+settings.local.json
+```

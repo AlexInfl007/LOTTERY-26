@@ -208,13 +208,16 @@ const isProviderAvailable = async () => {
   try {
     const currentProvider = await getCurrentProvider();
     if (!currentProvider) {
+      console.log('No provider available - wallet not connected');
       return false;
     }
     
     // Проверяем, что провайдер может выполнить базовые операции
-    await currentProvider.getNetwork();
+    const network = await currentProvider.getNetwork();
+    console.log('Provider network:', network.name || network.chainId);
     // Также проверяем возможность выполнения простого запроса
-    await currentProvider.getBlockNumber();
+    const blockNumber = await currentProvider.getBlockNumber();
+    console.log('Provider block number:', blockNumber);
     return true;
   } catch (error) {
     console.warn('Provider availability check failed:', error);

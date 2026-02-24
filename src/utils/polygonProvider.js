@@ -43,6 +43,26 @@ export const getPolygonProvider = () => {
 };
 
 /**
+ * Function to check if the provider is still responsive
+ */
+export const isProviderResponsive = async (providerToCheck = null) => {
+  const provider = providerToCheck || polygonProvider;
+  
+  if (!provider) {
+    return false;
+  }
+  
+  try {
+    // Test the provider with a basic call to ensure it's working
+    await provider.getBlockNumber();
+    return true;
+  } catch (error) {
+    console.warn('Provider responsiveness check failed:', error);
+    return false;
+  }
+};
+
+/**
  * Function to make RPC calls through the user's wallet provider
  */
 export const makePolygonRpcCall = async (method, params = []) => {
