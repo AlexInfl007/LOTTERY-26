@@ -217,7 +217,7 @@ const isProviderAvailable = async () => {
     await currentProvider.getBlockNumber();
     return true;
   } catch (error) {
-    console.warn('Provider availability check failed:', error.message);
+    console.warn('Provider availability check failed:', error);
     return false;
   }
 };
@@ -266,7 +266,7 @@ export const initializeContract = async (force = false) => {
           return await contractInstance.callStatic.prizePool();
         });
       } catch (validationError) {
-        console.warn('Contract validation failed:', validationError.message);
+        console.warn('Contract validation failed:', validationError);
         // Не прерываем инициализацию, если контракт недоступен по какой-либо причине
       }
       
@@ -274,6 +274,13 @@ export const initializeContract = async (force = false) => {
       resolve(contractInstance);
     } catch (error) {
       console.error('Failed to initialize contract:', error);
+      // Log more details about the error
+      if (error.reason) {
+        console.error('Error reason:', error.reason);
+      }
+      if (error.code) {
+        console.error('Error code:', error.code);
+      }
       reject(error);
     } finally {
       // Сбрасываем флаг инициализации
