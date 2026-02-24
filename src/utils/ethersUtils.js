@@ -45,6 +45,14 @@ export async function getCurrentProvider() {
   
   // Check if the provider is still responsive
   try {
+    // Check network first to ensure we're on the right chain
+    const chainIdHex = await provider.send('eth_chainId', []);
+    const chainId = parseInt(chainIdHex, 16);
+    if (chainId !== 137) {
+      console.warn('Provider is not on Polygon Mainnet. Current chainId:', chainId);
+      return null; // Return null to indicate wrong network
+    }
+    
     await provider.getBlockNumber();
     return provider;
   } catch (error) {
@@ -57,6 +65,13 @@ export async function getCurrentProvider() {
 // Function to get the current contract
 export async function getCurrentContract() {
   try {
+    // Check if provider is available and on correct network before initialization
+    const currentProvider = await getCurrentProvider();
+    if (!currentProvider) {
+      console.error('No valid provider available for contract initialization');
+      return null;
+    }
+    
     // Make sure the contract is properly initialized with the current provider
     await initializeContract(true);
     const contract = await getContractAsync();

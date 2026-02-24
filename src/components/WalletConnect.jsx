@@ -404,6 +404,14 @@ export default function WalletConnect({ onConnect }) {
       const provider = new ethers.BrowserProvider(ethereum);
       const signer = await provider.getSigner();
       
+      // Verify that the provider is on the correct network (Polygon)
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+      if (chainId !== 137) {
+        // Throw an error to be caught by the outer try-catch
+        throw new Error(`Please switch to Polygon Mainnet in your wallet. Current network: ${network.name || chainId}`);
+      }
+      
       // Test the provider by making a simple call to ensure it's working
       try {
         // Test basic provider functionality
@@ -415,13 +423,13 @@ export default function WalletConnect({ onConnect }) {
         console.warn("Provider test failed, but continuing with connection:", testError);
       }
       
-      // Initialize Polygon provider with user's provider
-      await initializePolygonProvider(provider);
-      
       // Update global provider and contract instance with the user's provider
       updateProvider(provider);
       
       updateContractInstance(provider);
+      
+      // Initialize Polygon provider with user's provider
+      await initializePolygonProvider(provider);
       
       // Also initialize through contract manager
       await initializeContract();
