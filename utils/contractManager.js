@@ -216,7 +216,23 @@ const isProviderAvailable = async () => {
     // Используем более совместимый метод для определения сети
     let network;
     try {
-      const chainIdHex = await currentProvider.send('eth_chainId', []);
+      let chainIdHex;
+      try {
+        chainIdHex = await currentProvider.send('eth_chainId', []);
+      } catch (e) {
+        // If send fails, try sendAsync as fallback
+        chainIdHex = await new Promise((resolve, reject) => {
+          currentProvider.sendAsync({
+            method: 'eth_chainId',
+            params: [],
+            id: Date.now()
+          }, (err, result) => {
+            if (err) reject(err);
+            else resolve(result.result);
+          });
+        });
+      }
+      
       const chainId = parseInt(chainIdHex, 16);
       console.log('Provider chain ID:', chainId);
       
@@ -274,7 +290,23 @@ export const initializeContract = async (force = false) => {
       
       // Проверяем, что провайдер находится в нужной сети (Polygon)
       try {
-        const chainIdHex = await provider.send('eth_chainId', []);
+        let chainIdHex;
+        try {
+          chainIdHex = await provider.send('eth_chainId', []);
+        } catch (e) {
+          // If send fails, try sendAsync as fallback
+          chainIdHex = await new Promise((resolve, reject) => {
+            provider.sendAsync({
+              method: 'eth_chainId',
+              params: [],
+              id: Date.now()
+            }, (err, result) => {
+              if (err) reject(err);
+              else resolve(result.result);
+            });
+          });
+        }
+        
         const chainId = parseInt(chainIdHex, 16);
         if (chainId !== 137) {
           throw new Error(`Please switch to Polygon Mainnet in your wallet. Current chain ID: ${chainId}`);

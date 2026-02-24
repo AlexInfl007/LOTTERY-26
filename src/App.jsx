@@ -42,20 +42,28 @@ export default function App() {
       }
       
       try {
-        // Wait for contract initialization (max 5 seconds)
+        // Wait for contract initialization (max 10 seconds with retries)
         let attempts = 0;
-        while (attempts < 10) {
+        let contractInitialized = false;
+        while (attempts < 20 && !contractInitialized) {
           try {
             await readPrizePool();
-            break; // If this succeeds, contract is ready
+            contractInitialized = true; // Mark as initialized if no error thrown
           } catch (error) {
-            if (error.message && !error.message.includes('Contract not initialized')) {
+            if (error.message && !error.message.includes('Contract not initialized') && 
+                !error.message.includes('No provider available') && 
+                !error.message.includes('No valid provider')) {
               // If it's a different error, rethrow it
               throw error;
             }
             await new Promise(resolve => setTimeout(resolve, 500));
             attempts++;
           }
+        }
+        
+        if (!contractInitialized) {
+          console.error("Contract failed to initialize after multiple attempts");
+          throw new Error("Contract failed to initialize");
         }
         
         if (!mounted) return;
