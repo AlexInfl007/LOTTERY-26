@@ -227,23 +227,92 @@ export default function WalletConnect({ onConnect }) {
   const connect = async () => {
     if (typeof window === "undefined") return;
     
-    // If multiple wallets are available, show selection modal
-    if (availableWallets.length > 1) {
-      setShowWalletModal(true);
-      return;
-    }
-    
-    // If only one wallet is available, connect directly
-    if (availableWallets.length === 1) {
-      await connectToWallet(availableWallets[0]);
-      return;
-    }
-    
-    // If no wallets detected, show installation instructions
     setCheckingWallet(true);
     
     // Wait a bit to ensure any wallet extensions have loaded
     await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Detect available wallets again just before connection
+    const providers = await waitForEthereum(5000);
+    const detectedWallets = [];
+    
+    for (const provider of providers) {
+      // Try to verify that the provider is responsive
+      try {
+        await provider.request({ method: 'eth_chainId' });
+      } catch (e) {
+        console.log('Provider not responding:', e);
+        continue; // Skip unresponsive providers
+      }
+      
+      if (provider.isMetaMask) {
+        detectedWallets.push({ id: 'metamask', name: 'MetaMask', provider });
+      } else if (provider.isCoinbaseWallet) {
+        detectedWallets.push({ id: 'coinbase', name: 'Coinbase Wallet', provider });
+      } else if (provider.isTrustWallet) {
+        detectedWallets.push({ id: 'trust', name: 'Trust Wallet', provider });
+      } else if (provider.isBraveWallet) {
+        detectedWallets.push({ id: 'brave', name: 'Brave Wallet', provider });
+      } else if (provider.isTokenary) {
+        detectedWallets.push({ id: 'tokenary', name: 'Tokenary', provider });
+      } else if (provider.isAvalanche) {
+        detectedWallets.push({ id: 'avalanche', name: 'Core Wallet', provider });
+      } else if (provider.isBitKeep) {
+        detectedWallets.push({ id: 'bitkeep', name: 'BitKeep', provider });
+      } else if (provider.isPhantom) {
+        detectedWallets.push({ id: 'phantom', name: 'Phantom', provider });
+      } else if (provider.isRabby) {
+        detectedWallets.push({ id: 'rabby', name: 'Rabby', provider });
+      } else if (provider.isOkxWallet) {
+        detectedWallets.push({ id: 'okx', name: 'OKX Wallet', provider });
+      } else if (provider.isBinance) {
+        detectedWallets.push({ id: 'binance', name: 'Binance Web3 Wallet', provider });
+      } else {
+        // Generic provider - try to identify by host or other means
+        let walletName = 'Web3 Wallet';
+        
+        // Try to determine wallet type by checking specific properties
+        if (provider.host && typeof provider.host === 'string') {
+          if (provider.host.includes('metamask')) {
+            walletName = 'MetaMask';
+          } else if (provider.host.includes('coinbase')) {
+            walletName = 'Coinbase Wallet';
+          } else if (provider.host.includes('trust')) {
+            walletName = 'Trust Wallet';
+          }
+        }
+        
+        // Some wallets expose their names differently
+        if (provider.isFrame) {
+          walletName = 'Frame';
+        } else if (provider.isTally) {
+          walletName = 'Tally';
+        } else if (provider.isExodus) {
+          walletName = 'Exodus';
+        } else if (provider.isMathWallet) {
+          walletName = 'MathWallet';
+        } else if (provider.isHaloWallet) {
+          walletName = 'Halo Wallet';
+        }
+        
+        detectedWallets.push({ id: 'generic', name: walletName, provider });
+      }
+    }
+    
+    // If multiple wallets are available, show selection modal
+    if (detectedWallets.length > 1) {
+      setAvailableWallets(detectedWallets);
+      setShowWalletModal(true);
+      setCheckingWallet(false);
+      return;
+    }
+    
+    // If only one wallet is available, connect directly
+    if (detectedWallets.length === 1) {
+      setAvailableWallets(detectedWallets);
+      await connectToWallet(detectedWallets[0]);
+      return;
+    }
     
     // Use our improved provider detection function
     const ethereum = getPreferredProvider();

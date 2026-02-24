@@ -42,7 +42,16 @@ export async function getCurrentProvider() {
     // If no wallet provider, return null to indicate no connection
     return null;
   }
-  return provider;
+  
+  // Check if the provider is still responsive
+  try {
+    await provider.getBlockNumber();
+    return provider;
+  } catch (error) {
+    console.warn('Provider is not responsive:', error);
+    // Return null to indicate provider is not working
+    return null;
+  }
 }
 
 // Function to get the current contract
