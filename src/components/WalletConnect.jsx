@@ -450,7 +450,7 @@ export default function WalletConnect({ onConnect }) {
         if (error.code === -32002) {
           errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
         } else if (error.code === -32603) {
-          errorMessage = 'Internal error. Please make sure your wallet is properly installed, unlocked, and the selected wallet is active.';
+          errorMessage = 'Wallet connection failed: Please make sure your wallet is properly installed, unlocked, and ready. Try refreshing the page and connecting again.';
         } else if (error.code === -32075) {
           errorMessage = 'Method disabled. This may be due to browser restrictions or wallet configuration.';
         } else if (errorMessage.includes('network')) {
