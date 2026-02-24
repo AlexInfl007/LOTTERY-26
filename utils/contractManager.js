@@ -213,8 +213,24 @@ const isProviderAvailable = async () => {
     }
     
     // Проверяем, что провайдер может выполнить базовые операции
-    const network = await currentProvider.getNetwork();
-    console.log('Provider network:', network.name || network.chainId);
+    // Используем более совместимый метод для определения сети
+    let network;
+    try {
+      const chainIdHex = await currentProvider.send('eth_chainId', []);
+      const chainId = parseInt(chainIdHex, 16);
+      console.log('Provider chain ID:', chainId);
+      
+      // Для Polygon Mainnet ожидаем chainId 137
+      if (chainId !== 137) {
+        console.warn('Provider is not on Polygon Mainnet. Current chainId:', chainId);
+        // Можно добавить автоматическое переключение на Polygon
+        throw new Error('Provider is not on Polygon Mainnet');
+      }
+    } catch (networkError) {
+      console.warn('Could not verify network:', networkError);
+      return false;
+    }
+    
     // Также проверяем возможность выполнения простого запроса
     const blockNumber = await currentProvider.getBlockNumber();
     console.log('Provider block number:', blockNumber);
@@ -255,6 +271,19 @@ export const initializeContract = async (force = false) => {
         throw new Error('No provider available - please connect your wallet');
       }
       provider = p;
+      
+      // Проверяем, что провайдер находится в нужной сети (Polygon)
+      try {
+        const chainIdHex = await provider.send('eth_chainId', []);
+        const chainId = parseInt(chainIdHex, 16);
+        if (chainId !== 137) {
+          throw new Error(`Please switch to Polygon Mainnet in your wallet. Current chain ID: ${chainId}`);
+        }
+      } catch (networkError) {
+        console.error('Network verification failed:', networkError);
+        reject(networkError);
+        return;
+      }
       
       // Создаем экземпляр контракта
       contractInstance = new ethers.Contract(

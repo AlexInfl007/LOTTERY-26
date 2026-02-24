@@ -12,9 +12,14 @@ export const initializePolygonProvider = async (walletProvider) => {
     
     // Test the provider with a basic call to ensure it's working
     try {
-      // Get network info to verify the provider works
-      const network = await polygonProvider.getNetwork();
-      console.log('Провайдер Polygon инициализирован с провайдером кошелька пользователя. Сеть:', network.name || network.chainId);
+      // Verify that the provider is on the correct network (Polygon)
+      const chainIdHex = await polygonProvider.send('eth_chainId', []);
+      const chainId = parseInt(chainIdHex, 16);
+      if (chainId !== 137) {
+        throw new Error(`Provider is not on Polygon Mainnet. Current chainId: ${chainId}`);
+      }
+      
+      console.log('Провайдер Polygon инициализирован с провайдером кошелька пользователя. Сеть: Polygon Mainnet (137)');
       
       // Additional test: get block number to ensure full functionality
       const blockNumber = await polygonProvider.getBlockNumber();
@@ -22,6 +27,7 @@ export const initializePolygonProvider = async (walletProvider) => {
     } catch (testError) {
       console.warn('Предупреждение: ошибка при тестировании провайдера Polygon:', testError);
       // Don't throw here as some wallets might have restrictions on certain methods
+      throw testError; // Re-throw to be handled by calling function
     }
     
     return polygonProvider;
