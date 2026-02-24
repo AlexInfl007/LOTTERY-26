@@ -47,17 +47,24 @@ export async function getCurrentProvider() {
 
 // Function to get the current contract
 export async function getCurrentContract() {
-  // Check if we have a provider (wallet connected)
-  const currentProvider = await getCurrentProvider();
-  if (!currentProvider) {
-    // Return null if no provider (wallet not connected)
-    return null;
-  }
-  
   try {
     // Make sure the contract is properly initialized with the current provider
     await initializeContract(true);
-    return await getContractAsync();
+    const contract = await getContractAsync();
+    
+    // Additional check to ensure contract is properly initialized
+    if (!contract) {
+      console.error('Contract is null after initialization');
+      return null;
+    }
+    
+    // Test that contract methods are accessible
+    if (typeof contract.prizePool !== 'function') {
+      console.error('Contract methods are not accessible');
+      return null;
+    }
+    
+    return contract;
   } catch (error) {
     console.warn('getCurrentContract failed:', error);
     return null;
@@ -305,13 +312,6 @@ export async function buyTicket(signer) {
 // Function to get connected wallet's tickets
 export async function getUserTickets(walletAddress) {
   try {
-    // Check if we have a provider (wallet connected)
-    const currentProvider = await getCurrentProvider();
-    if (!currentProvider) {
-      // Return 0 if no provider (wallet not connected)
-      return 0;
-    }
-    
     const currentContract = await getCurrentContract();
     if (!currentContract) {
       console.error('Contract not initialized');

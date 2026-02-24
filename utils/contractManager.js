@@ -213,6 +213,8 @@ const isProviderAvailable = async () => {
     
     // Проверяем, что провайдер может выполнить базовые операции
     await currentProvider.getNetwork();
+    // Также проверяем возможность выполнения простого запроса
+    await currentProvider.getBlockNumber();
     return true;
   } catch (error) {
     console.warn('Provider availability check failed:', error.message);
@@ -260,7 +262,9 @@ export const initializeContract = async (force = false) => {
       
       // Проверяем, что контракт отвечает
       try {
-        await contractInstance.callStatic.prizePool();
+        await retryOperation(async () => {
+          return await contractInstance.callStatic.prizePool();
+        });
       } catch (validationError) {
         console.warn('Contract validation failed:', validationError.message);
         // Не прерываем инициализацию, если контракт недоступен по какой-либо причине
