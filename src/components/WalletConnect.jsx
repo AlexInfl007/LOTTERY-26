@@ -509,6 +509,10 @@ export default function WalletConnect({ onConnect }) {
           console.error('Error adding Polygon network:', addError);
           throw addError;
         }
+      } else if (switchError.code === -32002) {
+        // User already has a pending request to switch networks
+        console.log('Network switch request already pending');
+        throw new Error('Network switch request already pending. Please check your wallet and approve/reject the existing request.');
       } else {
         console.error('Error switching to Polygon network:', switchError);
         throw switchError;

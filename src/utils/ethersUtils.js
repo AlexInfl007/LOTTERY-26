@@ -46,7 +46,24 @@ export async function getCurrentProvider() {
   // Check if the provider is still responsive
   try {
     // Check network first to ensure we're on the right chain
-    const chainIdHex = await provider.send('eth_chainId', []);
+    // Using more reliable method for getting chain ID
+    let chainIdHex;
+    try {
+      chainIdHex = await provider.send('eth_chainId', []);
+    } catch (e) {
+      // If send fails, try sendAsync as fallback
+      chainIdHex = await new Promise((resolve, reject) => {
+        provider.sendAsync({
+          method: 'eth_chainId',
+          params: [],
+          id: Date.now()
+        }, (err, result) => {
+          if (err) reject(err);
+          else resolve(result.result);
+        });
+      });
+    }
+    
     const chainId = parseInt(chainIdHex, 16);
     if (chainId !== 137) {
       console.warn('Provider is not on Polygon Mainnet. Current chainId:', chainId);
@@ -83,7 +100,7 @@ export async function getCurrentContract() {
     }
     
     // Test that contract methods are accessible
-    if (typeof contract.prizePool !== 'function') {
+    if (!contract.interface || typeof contract.prizePool !== 'function') {
       console.error('Contract methods are not accessible');
       return null;
     }
