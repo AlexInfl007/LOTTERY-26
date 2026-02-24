@@ -20,6 +20,17 @@ function getPreferredProvider() {
     return null;
   }
 
+  // Wait briefly to ensure all wallet extensions have loaded
+  const startTime = Date.now();
+  while (Date.now() - startTime < 1000) {
+    if (window.ethereum && (window.ethereum.providers || window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet)) {
+      break;
+    }
+    // Small delay to allow for initialization
+    const start = Date.now();
+    while (Date.now() - start < 10); // Busy wait for 10ms
+  }
+
   // Check for multiple providers
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
     // Prioritize MetaMask over other wallets
@@ -106,7 +117,7 @@ export const connectWallet = async () => {
   }
 
   // Wait a bit for wallet extensions to initialize
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1500));
 
   // Get the preferred provider
   const ethereum = getPreferredProvider();
@@ -175,7 +186,8 @@ export const connectWallet = async () => {
     } else if (error.code === -32002) {
       errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
     } else if (error.code === -32603) {
-      errorMessage = 'Wallet connection failed: Please make sure your wallet is properly installed, unlocked, and ready. Try refreshing the page and connecting again.';
+      // Specific handling for the error you're experiencing
+      errorMessage = 'Wallet connection failed: No active wallet found. Please make sure your wallet is properly installed, unlocked, and ready. If using MetaMask, please ensure it is unlocked and connected to the Polygon network.';
     } else if (error.code === -32075) {
       errorMessage = 'Method disabled. This may be due to browser restrictions or wallet configuration.';
     } else if (errorMessage.includes('network')) {
@@ -192,6 +204,10 @@ export const connectWallet = async () => {
       errorMessage = 'Wallet connection unauthorized. Please check your wallet permissions and try again.';
     } else if (errorMessage.includes('disconnected')) {
       errorMessage = 'Wallet disconnected during connection. Please reconnect and try again.';
+    } else if (errorMessage.includes('execution failed')) {
+      errorMessage = 'Wallet connection execution failed. Please make sure your wallet is unlocked and properly configured.';
+    } else if (error.message?.includes('Failed to fetch dynamically imported module')) {
+      errorMessage = 'Wallet connection failed due to a module loading issue. Please refresh the page and try again.';
     }
     
     throw new Error(errorMessage);
