@@ -7,36 +7,40 @@ node_modules/
 .env.local
 .env.*
 
-# Logs
-*.log
-
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
 # Build outputs
 dist/
 build/
 target/
-*.out
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# IDE specific
+.vscode/
+.idea/
 
 # Python specific
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage*
-.cache
 
-# Compressed files
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# MyPy cache
+.mypy_cache/
+
+# Pytest cache
+.pytest_cache/
+
+# Compression files
 *.zip
 *.gz
 *.tar
@@ -60,32 +64,7 @@ pip-delete-this-directory.txt
 *.tar.xz
 *.tar.zst
 
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
+# OS generated files
 .DS_Store
 Thumbs.db
-
-# MyPy cache
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pytest cache
-.pytest_cache/
-
-# Gradle
-.gradle/
-
-# Compiled files
-*.class
-*.o
-*.a
-*.obj
-*.so
-*.dll
-*.exe
 ```
