@@ -4,6 +4,26 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173
+    host: true,
+    port: 5173,
+    headers: {
+      'Content-Security-Policy': "script-src 'self'; object-src 'none';"
+    }
+  },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        assetFileNames: (assetInfo) => {
+          let extType = assetInfo.name.split('.').at(1);
+          if (/png|jpe?g|svg|gif|tiff|bmp|ico/i.test(extType)) {
+            return 'images/[name].[hash][extname]';
+          }
+          return '[name].[hash][extname]';
+        }
+      }
+    }
   }
 })
