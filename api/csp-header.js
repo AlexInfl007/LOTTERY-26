@@ -1,9 +1,29 @@
 export default function handler(req, res) {
-  // Set the Content-Security-Policy header
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' 'strict-dynamic' 'nonce-{{nonce}}'; style-src 'self' 'unsafe-inline' 'nonce-{{nonce}}'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self' https://polygon-rpc.com https://api.polygonscan.com https://rpc-mumbai.maticvigil.com https://api.etherscan.io; frame-src 'self' https://www.youtube.com; object-src 'none'; base-uri 'self';"
-  );
+  // Enhanced CSP configuration for Web3 applications
+  // Includes support for various wallet providers and WebAssembly operations
+  const cspHeader = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' https:",
+    "connect-src 'self' https: wss:",
+    "frame-src 'self' https://www.youtube.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "manifest-src 'self'",
+    "media-src 'self' https:",
+    "worker-src 'self' blob:",
+    "frame-ancestors 'self'"
+  ].join('; ');
+
+  res.setHeader('Content-Security-Policy', cspHeader);
+
+  // Additional security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   // Continue with your API logic here
   res.status(200).json({ success: true });
