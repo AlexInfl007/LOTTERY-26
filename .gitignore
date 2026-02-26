@@ -1,1 +1,1 @@
-Nothing should be ignored based on the provided file changes. The changes consist only of source/config files (.md, .js, .json) without any build artifacts, dependencies, or temporary files that would require gitignore rules.
+Nothing should be ignored based on the provided file changes. The only modified file is 'api/csp-header.js', which is a source code file and should not be added to .gitignore.
