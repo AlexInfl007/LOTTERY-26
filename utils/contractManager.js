@@ -185,7 +185,13 @@ const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
           error.message.includes('insufficient funds')) {
         if (i < maxRetries - 1) {
           console.log(`Waiting ${delay}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise(resolve => {
+            const channel = new MessageChannel();
+            channel.port1.onmessage = () => resolve();
+            channel.port2.postMessage('');
+            channel.port1.close();
+            channel.port2.close();
+          });
           delay *= 2; // Увеличиваем задержку вдвое для следующей попытки
           continue;
         }
@@ -460,7 +466,7 @@ export const getWinnersInfo = async () => {
 
 // Функция для периодического обновления данных
 export const setupPeriodicUpdates = (callback, intervalMs = 30000) => {
-  let intervalId = null;
+  let timeoutId = null;
   
   const updateData = async () => {
     try {
@@ -489,18 +495,18 @@ export const setupPeriodicUpdates = (callback, intervalMs = 30000) => {
         console.error('Reinitialization failed:', reinitError);
       }
     }
+    
+    // Schedule the next update using setTimeout instead of setInterval to avoid CSP issues
+    timeoutId = setTimeout(updateData, intervalMs);
   };
   
   // Выполняем первоначальное обновление
   updateData();
   
-  // Устанавливаем интервал для регулярных обновлений
-  intervalId = setInterval(updateData, intervalMs);
-  
   // Возвращаем функцию для остановки обновлений
   return () => {
-    if (intervalId) {
-      clearInterval(intervalId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
     }
   };
 };
@@ -553,7 +559,8 @@ export const subscribeToWinnerSelections = (callback) => {
       console.error('Error setting up winner selection subscription:', error);
       
       // Повторная попытка через некоторое время
-      setTimeout(setupSubscription, 5000);
+      const timer = setTimeout(setupSubscription, 5000);
+      return () => clearTimeout(timer);
     }
   };
 

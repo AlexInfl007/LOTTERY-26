@@ -1,28 +1,36 @@
+```
 # Dependencies
 node_modules/
 
-# Build outputs
+# Build artifacts
 dist/
 build/
-coverage/
-htmlcov/
+*.js.map
+*.css.map
 
-# Environment variables
+# Environment
 .env
 .env.local
-.env.*
+*.env.*
 
-# IDE files
+# Editors
 .vscode/
 .idea/
 *.swp
 *.swo
-*.tmp
 
 # Logs
 *.log
 
-# Python specific
+# Temporary files
+*.tmp
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -30,209 +38,5 @@ __pycache__/
 .Python
 *.so
 *.egg-info/
-
-# Virtual environments
-venv/
-.venv/
-.env/
-
-# Testing
-.pytest_cache/
-.coverage
-.tox/
-
-# Distribution / packaging
-.DS_Store
-Thumbs.db
-*.tar*
-*.zip
-*.gz
-*.rar
-*.7z
-
-# Compiled and binary files
-*.o
-*.obj
-*.a
-*.lib
-*.so
-*.dll
-*.dylib
-*.exe
-*.out
-*.class
-
-# Gradle
-.gradle/
-build/
-
-# MyPy
-.mypy_cache/
-
-# Temporary files
-*~
-\#*\#
-*.bak
-*.swp
-*.swo
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-*:*
-desktop.ini
-
-# Rust/Cargo
-target/
-Cargo.lock
-
-# Go
-*.mod
-*.sum
-
-# Java
-*.class
-*.jar
-*.war
-*.ear
-hs_err_pid*
-
-# C/C++
-*.i
-*.ii
-*.s
-*.su
-*.gcda
-*.gcno
-*.gcov
-*.stackdump
-
-# Node.js
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-node_modules/
-
-# Bower
-bower_components/
-
-# Jspm
-jspm_packages/
-
-# Webpack
-webpack-stats.json
-
-# Ember
-tmp/
-temp/
-
-# Rails
-*.rbc
-capybara-*.html
-.rspec
-public/system/
-vendor/bundle/
-.bundle/
-.rbx/
-
-# Spring
-bin/
-gen/
-
-# Visual Studio
-*.VC.db
-*.VC.VC.opendb
-*.user
-*.userosscache
-*.sln.docstates
-ipch/
-obj/
-*.VC.db
-*.VC.VC.opendb
-
-# CodeLite
-.codelite/
-.cxx/
-.out/
-
-# Sublime Text
-*.sublime-workspace
-*.sublime-project
-
-# Vim
-*.un~
-Session.vim
-.netrwhist
-*~
-
-# Eclipse
-.metadata
-bin/
-tmp/
-*.tmp
-*.bak
-*.swp
-*~.nib
-local.properties
-.settings/
-.loadpath
-.recommenders
-
-# IntelliJ IDEA
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# NetBeans
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-# VS Code
-.vscode/
-
-# Docker
-.dockerenv
-Dockerfile*
-
-# Temporary folders
-tmp/
-temp/
-
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
-
-# Julia
-julia-*/
-
-# Zig
-zig*/
+.eggs/
+```
