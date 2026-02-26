@@ -1,5 +1,8 @@
 ```
-# Environment variables
+# Dependencies
+node_modules/
+
+# Environment
 .env
 .env.local
 .env.*
@@ -7,49 +10,77 @@
 # Logs
 *.log
 
-# Temporary files
-*.tmp
-*.swp
-*.swo
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Dependencies
-node_modules/
-venv/
-.venv/
-__pycache__/
-*.egg-info/
-dist/
-build/
-target/
-.gradle/
-
-# Compiled files
-*.pyc
-*.class
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
-
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Editor/IDE
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Compressed files
+# Build artifacts
+dist/
+build/
+target/
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.envrc
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+target/
+.gradle/
+build/
+
+# C/C++
+*.o
+*.a
+*.obj
+*.out
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+*.exe
+*.test
+*.prof
+*.out
+
+# Ruby
+*.gem
+*.rbc
+.bundle/
+vendor/bundle/
+.rbenv-gemsets/
+.rbenv-version/
+
+# Node.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+node_modules/
+
+# Compression
 *.zip
 *.gz
 *.tar
@@ -72,4 +103,8 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+
+# OS
+.DS_Store
+Thumbs.db
 ```
