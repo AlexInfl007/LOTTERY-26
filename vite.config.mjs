@@ -7,7 +7,7 @@ export default defineConfig({
     host: true,
     port: 5173,
     headers: {
-      'Content-Security-Policy': "script-src 'self'; object-src 'none';"
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self' https://polygon-rpc.com https://api.polygonscan.com https://rpc-mumbai.maticvigil.com https://api.etherscan.io; frame-src 'self' https://www.youtube.com; object-src 'none';"
     }
   },
   build: {
