@@ -1,4 +1,4 @@
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from './contract';
+import { CONTRACT_ADDRESS } from './contract';
 import { ethers } from 'ethers';
 
 // public RPC (free)
@@ -6,6 +6,13 @@ const DEFAULT_RPC = 'https://polygon-rpc.com'; // бесплатный публ�
 
 // provider можно заменить пользователем при желании
 const provider = new ethers.JsonRpcProvider(DEFAULT_RPC);
+
+// ABI контракта (поскольку он отсутствует в файле contract.js)
+const CONTRACT_ABI = [
+  "function prizePool() view returns (uint256)",
+  "event TicketBought(address indexed buyer, uint256 indexed round)"
+];
+
 const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 
 // read prize pool (returns number in MATIC/POL decimals assumed 18 -> convert to ether)
