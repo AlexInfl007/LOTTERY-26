@@ -3,11 +3,11 @@ export default function handler(req, res) {
   // Includes support for various wallet providers and WebAssembly operations
   const cspHeader = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
-    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://polygonscan.com https://api.polygonscan.com https://polygon-rpc.com https://*.walletconnect.com https://*.walletconnect.org https://*.coinbase.com https://*.metamask.io https://*.infura.io https://*.alchemyapi.io https://*.alchemy.com https://*.chain.link",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.googleapis.com https://*.gstatic.com",
     "img-src 'self' data: blob: https:",
-    "font-src 'self' https:",
-    "connect-src 'self' https: wss:",
+    "font-src 'self' https://fonts.gstatic.com https://*.gstatic.com",
+    "connect-src 'self' https: wss: https://polygonscan.com https://api.polygonscan.com https://polygon-rpc.com https://rpc-mumbai.maticvigil.com https://api.etherscan.io https://*.walletconnect.com https://*.walletconnect.org https://*.infura.io https://*.alchemyapi.io https://*.alchemy.com https://*.chain.link",
     "frame-src 'self' https://www.youtube.com",
     "object-src 'none'",
     "base-uri 'self'",
