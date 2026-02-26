@@ -26,7 +26,8 @@ export default function LanguageSelector() {
     i18n.changeLanguage(code);
     setSelectedLang(code);
     // Don't close immediately to allow for visual feedback
-    setTimeout(() => setOpen(false), 150);
+    const timer = setTimeout(() => setOpen(false), 150);
+    return () => clearTimeout(timer);
   };
 
   const currentLanguage = languages.find((l) => l.code === selectedLang);

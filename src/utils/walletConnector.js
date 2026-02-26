@@ -18,7 +18,9 @@ const POLYGON_MAINNET_CONFIG = {
 async function waitForWalletInitialization(timeout = 1500) {
   return new Promise((resolve) => {
     const startTime = Date.now();
-    const checkInterval = setInterval(() => {
+    
+    // Using a recursive setTimeout pattern instead of setInterval to avoid CSP issues
+    const checkProvider = () => {
       if (window.ethereum && 
           (window.ethereum.providers || 
            window.ethereum.isMetaMask || 
@@ -30,16 +32,18 @@ async function waitForWalletInitialization(timeout = 1500) {
            window.ethereum.isOkxWallet ||
            window.ethereum.isBinance ||
            window.ethereum.isTokenPocket)) {
-        clearInterval(checkInterval);
         resolve();
         return;
       }
       
       if (Date.now() - startTime >= timeout) {
-        clearInterval(checkInterval);
         resolve();
+      } else {
+        setTimeout(checkProvider, 50); // Check every 50ms
       }
-    }, 50); // Check every 50ms
+    };
+    
+    checkProvider();
   });
 }
 

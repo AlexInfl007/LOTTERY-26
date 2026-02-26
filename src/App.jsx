@@ -56,7 +56,13 @@ export default function App() {
               // If it's a different error, rethrow it
               throw error;
             }
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => {
+              const channel = new MessageChannel();
+              channel.port1.onmessage = () => resolve();
+              channel.port2.postMessage('');
+              channel.port1.close();
+              channel.port2.close();
+            });
             attempts++;
           }
         }
@@ -124,7 +130,9 @@ export default function App() {
 
   // Periodically update the prize pool to reflect new contributions when wallet is connected
   useEffect(() => {
-    const interval = setInterval(async () => {
+    let intervalId;
+    
+    const updatePool = async () => {
       // Check if wallet is connected before attempting to update
       const currentProvider = await getCurrentProvider();
       if (!currentProvider) {
@@ -138,9 +146,23 @@ export default function App() {
       } catch (error) {
         console.error("Error updating prize pool:", error);
       }
-    }, 30000); // Update every 30 seconds
+    };
+    
+    // Using a recursive setTimeout pattern instead of setInterval to avoid CSP issues
+    const scheduleUpdate = () => {
+      intervalId = setTimeout(async () => {
+        await updatePool();
+        scheduleUpdate(); // Schedule the next update
+      }, 30000); // Update every 30 seconds
+    };
+    
+    scheduleUpdate();
 
-    return () => clearInterval(interval);
+    return () => {
+      if (intervalId) {
+        clearTimeout(intervalId);
+      }
+    };
   }, []);
 
   // Update user's tickets when wallet connects
