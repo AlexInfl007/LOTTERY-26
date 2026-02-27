@@ -1,1 +1,3 @@
-(api/csp-header.js, vercel.json, vite.config.mjs are all source/config files, no build artifacts, dependencies, or temp files in the changes)
+```
+_headers
+```
