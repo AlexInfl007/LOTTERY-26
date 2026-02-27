@@ -1,1 +1,1 @@
-Nothing should be ignored based on the provided file changes. The only modified file is 'api/csp-header.js', which is a source code file and should not be added to .gitignore.
+(api/csp-header.js, vercel.json, vite.config.mjs are all source/config files, no build artifacts, dependencies, or temp files in the changes)
