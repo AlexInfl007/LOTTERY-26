@@ -3,7 +3,7 @@ export default function handler(req, res) {
   // Includes support for various wallet providers and WebAssembly operations
   const cspHeader = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.googleapis.com https://*.gstatic.com",
     "img-src 'self' data: blob: https:",
     "font-src 'self' https://fonts.gstatic.com https://*.gstatic.com",
