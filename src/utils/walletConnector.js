@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { initializeContract } from '../../utils/contractManager';
+import { setSharedProvider } from './providerStore';
 
 // Configuration for Polygon Mainnet
 const POLYGON_MAINNET_CONFIG = {
@@ -199,6 +200,9 @@ export const connectWallet = async () => {
     } catch (testError) {
       console.warn("Provider test failed, but continuing with connection:", testError);
     }
+
+    // Save provider globally before contract initialization
+    setSharedProvider(provider);
 
     // Initialize the contract with the new provider
     await initializeContract();
