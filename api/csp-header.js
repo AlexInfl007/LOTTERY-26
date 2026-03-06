@@ -3,7 +3,7 @@ export default function handler(req, res) {
   // Includes support for various wallet providers and WebAssembly operations
   const cspHeader = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://polygonscan.com https://api.polygonscan.com https://polygon-rpc.com https://*.walletconnect.com https://*.walletconnect.org https://*.coinbase.com https://*.metamask.io https://*.infura.io https://*.alchemyapi.io https://*.alchemy.com https://*.chain.link https://*.polygon-rpc.com https://*.matic.network https://*.binance.org https://*.okex.org https://*.trustwallet.com https://*.phantom.app https://*.bitkeep.com https://*.rabby.io https://*.okx.com https://*.tokenpocket.pro https://*.brave.com",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' chrome-extension: moz-extension: https://polygonscan.com https://api.polygonscan.com https://polygon-rpc.com https://*.walletconnect.com https://*.walletconnect.org https://*.coinbase.com https://*.metamask.io https://*.infura.io https://*.alchemyapi.io https://*.alchemy.com https://*.chain.link https://*.polygon-rpc.com https://*.matic.network https://*.binance.org https://*.okex.org https://*.trustwallet.com https://*.phantom.app https://*.bitkeep.com https://*.rabby.io https://*.okx.com https://*.tokenpocket.pro https://*.brave.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.googleapis.com https://*.gstatic.com",
     "img-src 'self' data: blob: https:",
     "font-src 'self' https://fonts.gstatic.com https://*.gstatic.com",

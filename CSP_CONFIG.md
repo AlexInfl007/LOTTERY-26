@@ -9,11 +9,12 @@ This document provides comprehensive information about the Content Security Poli
 - Restricts all resources to the same origin by default
 - Provides baseline security against external resource loading
 
-### script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'
+### script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' chrome-extension: moz-extension:
 - **'self'**: Allows scripts from the same origin
 - **'unsafe-inline'**: Required for React/Vite development and inline scripts
-- **'unsafe-eval'**: Necessary for some Web3 libraries and dynamic code evaluation
-- **'wasm-unsafe-eval'**: Required for WebAssembly execution (essential for ethers.js and other crypto libraries)
+- **'unsafe-eval'**: Required for compatibility with some wallet inpage/injected providers (MetaMask family).
+- **'wasm-unsafe-eval'**: Required for WebAssembly execution (essential for ethers.js and other crypto libraries).
+- **chrome-extension: / moz-extension:** Allows browser wallet extension scripts in Chromium/Firefox environments.
 
 ### style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.googleapis.com https://*.gstatic.com
 - Allows stylesheets from the same origin
@@ -94,7 +95,7 @@ The configuration includes support for major blockchain networks:
 
 ## Implementation Notes
 
-1. **Development vs Production**: The 'unsafe-inline' and 'unsafe-eval' directives are necessary for Vite development server and React Fast Refresh. Consider stricter policies in production if possible.
+1. **Development vs Production**: The 'unsafe-inline' directive may be required for Vite development server and React Fast Refresh. For production, keep this enabled only if wallet-injection compatibility requires it; otherwise remove it.
 
 2. **WebAssembly Support**: The 'wasm-unsafe-eval' directive is critical for Web3 libraries like ethers.js that rely on cryptographic operations.
 
