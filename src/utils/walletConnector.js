@@ -27,6 +27,8 @@ const WALLET_DEFINITIONS = [
   { key: 'brave', name: 'Brave Wallet', icon: '🦁', matcher: (provider) => provider?.isBraveWallet }
 ];
 
+let walletCache = [];
+
 function getRawProviders() {
   if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') return [];
 
@@ -37,14 +39,38 @@ function getRawProviders() {
   return [window.ethereum];
 }
 
-function detectWalletMetadata(provider) {
+function buildUnknownWalletKey(provider, index) {
+  const parts = [
+    provider?.rdns,
+    provider?.id,
+    provider?.name,
+    provider?.providerName,
+    provider?.isFrame ? 'frame' : null,
+    provider?.isTokenary ? 'tokenary' : null,
+    provider?.isAvalanche ? 'avalanche' : null,
+    provider?.isBitKeep ? 'bitkeep' : null,
+    provider?.isExodus ? 'exodus' : null,
+    provider?.isSafePal ? 'safepal' : null
+  ].filter(Boolean);
+
+  const normalized = (parts.join('-') || `injected-${index + 1}`)
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return `injected-${normalized || index + 1}`;
+}
+
+function detectWalletMetadata(provider, index) {
   const knownWallet = WALLET_DEFINITIONS.find((wallet) => wallet.matcher(provider));
   if (knownWallet) {
     return knownWallet;
   }
 
   return {
-    key: `wallet-${Math.random().toString(36).slice(2, 8)}`,
+    key: buildUnknownWalletKey(provider, index),
     name: provider?.name || provider?.providerName || 'Injected Wallet',
     icon: '👛'
   };
@@ -54,25 +80,28 @@ function getAvailableWalletEntries() {
   const providers = getRawProviders();
   const entries = [];
   const seenProvider = new Set();
-  const seenKeys = new Set();
+  const keyCount = new Map();
 
-  for (const provider of providers) {
-    if (!provider || seenProvider.has(provider)) continue;
+  providers.forEach((provider, index) => {
+    if (!provider || seenProvider.has(provider)) return;
     seenProvider.add(provider);
 
-    const walletMeta = detectWalletMetadata(provider);
-    const key = seenKeys.has(walletMeta.key) ? `${walletMeta.key}-${entries.length}` : walletMeta.key;
-    seenKeys.add(key);
+    const walletMeta = detectWalletMetadata(provider, index);
+    const baseKey = walletMeta.key;
+    const duplicates = keyCount.get(baseKey) || 0;
+    keyCount.set(baseKey, duplicates + 1);
+    const key = duplicates > 0 ? `${baseKey}-${duplicates + 1}` : baseKey;
 
     entries.push({
       key,
-      walletType: walletMeta.key,
+      walletType: key,
       name: walletMeta.name,
       icon: walletMeta.icon,
       provider
     });
-  }
+  });
 
+  walletCache = entries;
   return entries;
 }
 
@@ -114,6 +143,14 @@ async function getPreferredProvider(selectedWalletType) {
   }
 
   await waitForWalletInitialization(1500);
+
+  if (selectedWalletType && walletCache.length > 0) {
+    const selectedFromCache = walletCache.find((entry) => entry.key === selectedWalletType || entry.walletType === selectedWalletType);
+    if (selectedFromCache) {
+      return selectedFromCache.provider;
+    }
+  }
+
   const entries = getAvailableWalletEntries();
   if (entries.length === 0) return null;
 
@@ -174,13 +211,14 @@ export const connectWallet = async (selectedWalletType = null) => {
       throw new Error('Wallet provider is not responding. Please make sure your wallet is unlocked and ready before connecting.');
     }
 
-    await switchToPolygonNetwork(ethereum);
-
+    // Request account access before chain switch (some wallets require active account first)
     const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
 
     if (!accounts || accounts.length === 0) {
       throw new Error('No accounts returned from wallet');
     }
+
+    await switchToPolygonNetwork(ethereum);
 
     const provider = new ethers.BrowserProvider(ethereum);
     const signer = await provider.getSigner();
