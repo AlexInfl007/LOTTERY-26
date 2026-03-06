@@ -68,6 +68,20 @@ function listProviderCandidates() {
   return uniqueProviders;
 }
 
+function isMobileBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+}
+
+function redirectToMetaMaskMobile() {
+  if (typeof window === 'undefined') return false;
+
+  const currentUrl = window.location.href;
+  const deepLink = `https://metamask.app.link/dapp/${encodeURIComponent(currentUrl.replace(/^https?:\/\//, ''))}`;
+  window.location.href = deepLink;
+  return true;
+}
+
 // Function to wait for wallet extensions to initialize
 async function waitForWalletInitialization(timeout = 1500) {
   return new Promise((resolve) => {
@@ -170,6 +184,11 @@ export const connectWallet = async () => {
   const candidates = listProviderCandidates();
 
   if (candidates.length === 0) {
+    if (isMobileBrowser()) {
+      redirectToMetaMaskMobile();
+      throw new Error('No injected wallet found in this browser. Redirecting to MetaMask app...');
+    }
+
     throw new Error('No crypto wallet found. Please install a wallet like MetaMask, Trust Wallet, or Coinbase Wallet.');
   }
 
