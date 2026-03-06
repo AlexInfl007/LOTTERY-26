@@ -15,120 +15,164 @@ const POLYGON_MAINNET_CONFIG = {
   blockExplorerUrls: ['https://polygonscan.com/']
 };
 
+const WALLET_DEFINITIONS = [
+  { key: 'metamask', name: 'MetaMask', icon: '🦊', matcher: (provider) => provider?.isMetaMask && !provider?.isBraveWallet && !provider?.isCoinbaseWallet && !provider?.isTrustWallet },
+  { key: 'coinbase', name: 'Coinbase Wallet', icon: '🟦', matcher: (provider) => provider?.isCoinbaseWallet },
+  { key: 'trust', name: 'Trust Wallet', icon: '🛡️', matcher: (provider) => provider?.isTrustWallet },
+  { key: 'rabby', name: 'Rabby', icon: '🐰', matcher: (provider) => provider?.isRabby },
+  { key: 'okx', name: 'OKX Wallet', icon: '⭕', matcher: (provider) => provider?.isOkxWallet },
+  { key: 'binance', name: 'Binance Wallet', icon: '🟨', matcher: (provider) => provider?.isBinance },
+  { key: 'tokenpocket', name: 'TokenPocket', icon: '👛', matcher: (provider) => provider?.isTokenPocket },
+  { key: 'phantom', name: 'Phantom', icon: '👻', matcher: (provider) => provider?.isPhantom },
+  { key: 'brave', name: 'Brave Wallet', icon: '🦁', matcher: (provider) => provider?.isBraveWallet }
+];
+
+let walletCache = [];
+
+function getRawProviders() {
+  if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') return [];
+
+  if (Array.isArray(window.ethereum.providers) && window.ethereum.providers.length > 0) {
+    return window.ethereum.providers;
+  }
+
+  return [window.ethereum];
+}
+
+function buildUnknownWalletKey(provider, index) {
+  const parts = [
+    provider?.rdns,
+    provider?.id,
+    provider?.name,
+    provider?.providerName,
+    provider?.isFrame ? 'frame' : null,
+    provider?.isTokenary ? 'tokenary' : null,
+    provider?.isAvalanche ? 'avalanche' : null,
+    provider?.isBitKeep ? 'bitkeep' : null,
+    provider?.isExodus ? 'exodus' : null,
+    provider?.isSafePal ? 'safepal' : null
+  ].filter(Boolean);
+
+  const normalized = (parts.join('-') || `injected-${index + 1}`)
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return `injected-${normalized || index + 1}`;
+}
+
+function detectWalletMetadata(provider, index) {
+  const knownWallet = WALLET_DEFINITIONS.find((wallet) => wallet.matcher(provider));
+  if (knownWallet) {
+    return knownWallet;
+  }
+
+  return {
+    key: buildUnknownWalletKey(provider, index),
+    name: provider?.name || provider?.providerName || 'Injected Wallet',
+    icon: '👛'
+  };
+}
+
+function getAvailableWalletEntries() {
+  const providers = getRawProviders();
+  const entries = [];
+  const seenProvider = new Set();
+  const keyCount = new Map();
+
+  providers.forEach((provider, index) => {
+    if (!provider || seenProvider.has(provider)) return;
+    seenProvider.add(provider);
+
+    const walletMeta = detectWalletMetadata(provider, index);
+    const baseKey = walletMeta.key;
+    const duplicates = keyCount.get(baseKey) || 0;
+    keyCount.set(baseKey, duplicates + 1);
+    const key = duplicates > 0 ? `${baseKey}-${duplicates + 1}` : baseKey;
+
+    entries.push({
+      key,
+      walletType: key,
+      name: walletMeta.name,
+      icon: walletMeta.icon,
+      provider
+    });
+  });
+
+  walletCache = entries;
+  return entries;
+}
+
 // Function to wait for wallet extensions to initialize
 async function waitForWalletInitialization(timeout = 1500) {
   return new Promise((resolve) => {
     const startTime = Date.now();
-    
-    // Using a recursive setTimeout pattern instead of setInterval to avoid CSP issues
+
     const checkProvider = () => {
-      if (window.ethereum && 
-          (window.ethereum.providers || 
-           window.ethereum.isMetaMask || 
-           window.ethereum.isCoinbaseWallet ||
-           window.ethereum.isTrustWallet ||
-           window.ethereum.isBraveWallet ||
-           window.ethereum.isPhantom ||
-           window.ethereum.isRabby ||
-           window.ethereum.isOkxWallet ||
-           window.ethereum.isBinance ||
-           window.ethereum.isTokenPocket)) {
+      if (window.ethereum && (window.ethereum.providers || window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet || window.ethereum.isTrustWallet || window.ethereum.isBraveWallet || window.ethereum.isPhantom || window.ethereum.isRabby || window.ethereum.isOkxWallet || window.ethereum.isBinance || window.ethereum.isTokenPocket)) {
         resolve();
         return;
       }
-      
+
       if (Date.now() - startTime >= timeout) {
         resolve();
       } else {
-        setTimeout(checkProvider, 50); // Check every 50ms
+        setTimeout(checkProvider, 50);
       }
     };
-    
+
     checkProvider();
   });
 }
 
+export async function getAvailableWallets() {
+  if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') {
+    return [];
+  }
+
+  await waitForWalletInitialization(1500);
+  return getAvailableWalletEntries().map(({ key, walletType, name, icon }) => ({ key, walletType, name, icon }));
+}
+
 // Function to detect and return the preferred provider
-async function getPreferredProvider() {
+async function getPreferredProvider(selectedWalletType) {
   if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') {
     return null;
   }
 
-  // Wait for wallet extensions to properly initialize
   await waitForWalletInitialization(1500);
 
-  // Additional check after waiting
-  if (!window.ethereum) {
-    return null;
+  if (selectedWalletType && walletCache.length > 0) {
+    const selectedFromCache = walletCache.find((entry) => entry.key === selectedWalletType || entry.walletType === selectedWalletType);
+    if (selectedFromCache) {
+      return selectedFromCache.provider;
+    }
   }
 
-  // Check for multiple providers (for wallets that inject multiple providers)
-  if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-    // Prioritize MetaMask over other wallets
-    for (const provider of window.ethereum.providers) {
-      if (provider.isMetaMask && 
-          !provider.isBraveWallet && 
-          !provider.isTokenary && 
-          !provider.isAvalanche && 
-          !provider.isBitKeep && 
-          !provider.isCoinbaseWallet &&
-          !provider.isTrustWallet) {
-        return provider;
-      }
-    }
-    
-    // Then check for other known providers in priority order
-    for (const provider of window.ethereum.providers) {
-      if (provider.isCoinbaseWallet) return provider;
-      if (provider.isTrustWallet) return provider;
-      if (provider.isBraveWallet) return provider;
-      if (provider.isRabby) return provider;
-      if (provider.isOkxWallet) return provider;
-      if (provider.isBinance) return provider;
-      if (provider.isTokenPocket) return provider;
-      if (provider.isPhantom) return provider;
-      if (provider.isAvalanche) return provider;
-      if (provider.isBitKeep) return provider;
-      if (provider.isTokenary) return provider;
-    }
-    
-    // Fallback to first available provider
-    if (window.ethereum.providers.length > 0) {
-      return window.ethereum.providers[0];
-    }
-    
-    return null;
+  const entries = getAvailableWalletEntries();
+  if (entries.length === 0) return null;
+
+  if (selectedWalletType) {
+    const selected = entries.find((entry) => entry.key === selectedWalletType || entry.walletType === selectedWalletType);
+    if (selected) return selected.provider;
   }
 
-  // Single provider case - check for specific wallet types in priority order
-  if (window.ethereum.isMetaMask) return window.ethereum;
-  if (window.ethereum.isCoinbaseWallet) return window.ethereum;
-  if (window.ethereum.isTrustWallet) return window.ethereum;
-  if (window.ethereum.isBraveWallet) return window.ethereum;
-  if (window.ethereum.isRabby) return window.ethereum;
-  if (window.ethereum.isOkxWallet) return window.ethereum;
-  if (window.ethereum.isBinance) return window.ethereum;
-  if (window.ethereum.isTokenPocket) return window.ethereum;
-  if (window.ethereum.isPhantom) return window.ethereum;
-
-  // Fallback to default provider
-  return window.ethereum;
+  return entries[0].provider;
 }
 
 // Function to switch to Polygon network
 export const switchToPolygonNetwork = async (ethereumProvider) => {
   try {
-    // Try to switch to Polygon network
     await ethereumProvider.request({
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: POLYGON_MAINNET_CONFIG.chainId }],
     });
     return true;
   } catch (switchError) {
-    // This error code indicates that the chain is not added to wallet
     if (switchError.code === 4902) {
       try {
-        // Add the Polygon network to the wallet
         await ethereumProvider.request({
           method: 'wallet_addEthereumChain',
           params: [POLYGON_MAINNET_CONFIG],
@@ -139,7 +183,6 @@ export const switchToPolygonNetwork = async (ethereumProvider) => {
         throw addError;
       }
     } else if (switchError.code === -32002) {
-      // User already has a pending request to switch networks
       throw new Error('Network switch request already pending. Please check your wallet and approve/reject the existing request.');
     } else {
       console.error('Error switching to Polygon network:', switchError);
@@ -149,62 +192,50 @@ export const switchToPolygonNetwork = async (ethereumProvider) => {
 };
 
 // Main wallet connection function
-export const connectWallet = async () => {
-  if (typeof window === "undefined") {
-    throw new Error("Window object not available");
+export const connectWallet = async (selectedWalletType = null) => {
+  if (typeof window === 'undefined') {
+    throw new Error('Window object not available');
   }
 
-  // Get the preferred provider (this now includes initialization wait)
-  const ethereum = await getPreferredProvider();
-  
+  const ethereum = await getPreferredProvider(selectedWalletType);
+
   if (!ethereum) {
-    throw new Error("No crypto wallet found. Please install a wallet like MetaMask, Trust Wallet, or Coinbase Wallet.");
+    throw new Error('No crypto wallet found. Please install a wallet like MetaMask, Trust Wallet, or Coinbase Wallet.');
   }
 
   try {
-    // Verify that the provider is responsive before attempting connection
     try {
       await ethereum.request({ method: 'eth_chainId' });
     } catch (error) {
-      console.error("Wallet provider is not responding:", error);
-      throw new Error("Wallet provider is not responding. Please make sure your wallet is unlocked and ready before connecting.");
+      console.error('Wallet provider is not responding:', error);
+      throw new Error('Wallet provider is not responding. Please make sure your wallet is unlocked and ready before connecting.');
     }
 
-    // Switch to Polygon network
-    await switchToPolygonNetwork(ethereum);
+    // Request account access before chain switch (some wallets require active account first)
+    const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
 
-    // Request account access
-    const accounts = await ethereum.request({ 
-      method: "eth_requestAccounts" 
-    });
-
-    // Check if we got valid accounts
     if (!accounts || accounts.length === 0) {
       throw new Error('No accounts returned from wallet');
     }
 
-    // Create provider and signer
+    await switchToPolygonNetwork(ethereum);
+
     const provider = new ethers.BrowserProvider(ethereum);
     const signer = await provider.getSigner();
 
-    // Verify that the provider is on the correct network (Polygon)
     const network = await provider.getNetwork();
     const chainId = Number(network.chainId);
     if (chainId !== 137) {
       throw new Error(`Please switch to Polygon Mainnet in your wallet. Current network: ${network.name || chainId}`);
     }
 
-    // Test the provider by making a simple call to ensure it's working
     try {
       await provider.getCode('0x0000000000000000000000000000000000000000');
     } catch (testError) {
-      console.warn("Provider test failed, but continuing with connection:", testError);
+      console.warn('Provider test failed, but continuing with connection:', testError);
     }
 
-    // Save provider globally before contract initialization
     setSharedProvider(provider);
-
-    // Initialize the contract with the new provider
     await initializeContract();
 
     return {
@@ -214,17 +245,15 @@ export const connectWallet = async () => {
       ethereum
     };
   } catch (error) {
-    console.error("Wallet connection error:", error);
-    
-    // More specific error handling
+    console.error('Wallet connection error:', error);
+
     let errorMessage = error.message || 'Unknown wallet connection error';
-    
+
     if (error.code === 4001) {
       errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
     } else if (error.code === -32002) {
       errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
     } else if (error.code === -32603) {
-      // Specific handling for the error you're experiencing
       errorMessage = 'Wallet connection failed: No active wallet found. Please make sure your wallet is unlocked and ready. If using MetaMask, please ensure it is unlocked and connected to the Polygon network. Try refreshing the page and make sure your wallet extension is properly installed and enabled.';
     } else if (error.code === -32075) {
       errorMessage = 'Method disabled. This may be due to browser restrictions or wallet configuration.';
@@ -247,22 +276,18 @@ export const connectWallet = async () => {
     } else if (error.message?.includes('Failed to fetch dynamically imported module')) {
       errorMessage = 'Wallet connection failed due to a module loading issue. Please refresh the page and try again.';
     }
-    
+
     throw new Error(errorMessage);
   }
 };
 
-// Function to disconnect wallet
 export const disconnectWallet = async () => {
-  // Currently, there's no standard way to disconnect from all wallets
-  // We just reset our internal state
   localStorage.removeItem('connectedWallet');
   return true;
 };
 
-// Function to check if wallet is connected
 export const isWalletConnected = async () => {
-  if (typeof window === "undefined" || !window.ethereum) {
+  if (typeof window === 'undefined' || !window.ethereum) {
     return false;
   }
 
@@ -275,9 +300,8 @@ export const isWalletConnected = async () => {
   }
 };
 
-// Function to get current wallet address
 export const getCurrentWalletAddress = async () => {
-  if (typeof window === "undefined" || !window.ethereum) {
+  if (typeof window === 'undefined' || !window.ethereum) {
     return null;
   }
 
