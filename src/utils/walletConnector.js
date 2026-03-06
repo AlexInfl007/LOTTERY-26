@@ -62,6 +62,19 @@ async function getPreferredProvider() {
     return null;
   }
 
+  const providerSupportsRpc = async (provider) => {
+    if (!provider?.request || typeof provider.request !== 'function') {
+      return false;
+    }
+
+    try {
+      await provider.request({ method: 'eth_chainId' });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // Check for multiple providers (for wallets that inject multiple providers)
   if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
     // Prioritize MetaMask over other wallets
@@ -73,46 +86,64 @@ async function getPreferredProvider() {
           !provider.isBitKeep && 
           !provider.isCoinbaseWallet &&
           !provider.isTrustWallet) {
-        return provider;
+        if (await providerSupportsRpc(provider)) {
+          return provider;
+        }
       }
     }
     
     // Then check for other known providers in priority order
     for (const provider of window.ethereum.providers) {
-      if (provider.isCoinbaseWallet) return provider;
-      if (provider.isTrustWallet) return provider;
-      if (provider.isBraveWallet) return provider;
-      if (provider.isRabby) return provider;
-      if (provider.isOkxWallet) return provider;
-      if (provider.isBinance) return provider;
-      if (provider.isTokenPocket) return provider;
-      if (provider.isPhantom) return provider;
-      if (provider.isAvalanche) return provider;
-      if (provider.isBitKeep) return provider;
-      if (provider.isTokenary) return provider;
+      if (
+        provider.isCoinbaseWallet ||
+        provider.isTrustWallet ||
+        provider.isBraveWallet ||
+        provider.isRabby ||
+        provider.isOkxWallet ||
+        provider.isBinance ||
+        provider.isTokenPocket ||
+        provider.isPhantom ||
+        provider.isAvalanche ||
+        provider.isBitKeep ||
+        provider.isTokenary
+      ) {
+        if (await providerSupportsRpc(provider)) {
+          return provider;
+        }
+      }
     }
     
     // Fallback to first available provider
     if (window.ethereum.providers.length > 0) {
-      return window.ethereum.providers[0];
+      for (const provider of window.ethereum.providers) {
+        if (await providerSupportsRpc(provider)) {
+          return provider;
+        }
+      }
     }
     
     return null;
   }
 
   // Single provider case - check for specific wallet types in priority order
-  if (window.ethereum.isMetaMask) return window.ethereum;
-  if (window.ethereum.isCoinbaseWallet) return window.ethereum;
-  if (window.ethereum.isTrustWallet) return window.ethereum;
-  if (window.ethereum.isBraveWallet) return window.ethereum;
-  if (window.ethereum.isRabby) return window.ethereum;
-  if (window.ethereum.isOkxWallet) return window.ethereum;
-  if (window.ethereum.isBinance) return window.ethereum;
-  if (window.ethereum.isTokenPocket) return window.ethereum;
-  if (window.ethereum.isPhantom) return window.ethereum;
+  if (
+    window.ethereum.isMetaMask ||
+    window.ethereum.isCoinbaseWallet ||
+    window.ethereum.isTrustWallet ||
+    window.ethereum.isBraveWallet ||
+    window.ethereum.isRabby ||
+    window.ethereum.isOkxWallet ||
+    window.ethereum.isBinance ||
+    window.ethereum.isTokenPocket ||
+    window.ethereum.isPhantom
+  ) {
+    if (await providerSupportsRpc(window.ethereum)) {
+      return window.ethereum;
+    }
+  }
 
   // Fallback to default provider
-  return window.ethereum;
+  return (await providerSupportsRpc(window.ethereum)) ? window.ethereum : null;
 }
 
 // Function to switch to Polygon network
@@ -170,13 +201,14 @@ export const connectWallet = async () => {
       throw new Error("Wallet provider is not responding. Please make sure your wallet is unlocked and ready before connecting.");
     }
 
-    // Switch to Polygon network
-    await switchToPolygonNetwork(ethereum);
-
     // Request account access
     const accounts = await ethereum.request({ 
       method: "eth_requestAccounts" 
     });
+
+    // Switch to Polygon network after wallet approval.
+    // Some mobile wallets reject chain switching before account authorization.
+    await switchToPolygonNetwork(ethereum);
 
     // Check if we got valid accounts
     if (!accounts || accounts.length === 0) {
