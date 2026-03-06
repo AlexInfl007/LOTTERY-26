@@ -64,6 +64,11 @@ export default function WalletConnect({ onConnect }) {
       onConnect && onConnect(connectionResult.address, connectionResult.provider, connectionResult.signer);
     } catch (error) {
       console.error("Wallet connection error:", error);
+
+      if (error.message?.includes('Redirecting to MetaMask app')) {
+        return;
+      }
+
       // Provide more user-friendly error message
       const userMessage = error.message.includes('No active wallet found') 
         ? "Wallet connection failed. Please make sure your wallet is unlocked and connected to the Polygon network. If using MetaMask, check that it's properly installed and enabled."
