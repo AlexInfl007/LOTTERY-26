@@ -1,30 +1,30 @@
 import React, { useState, useEffect } from "react";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
-import { ethers } from 'ethers';
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
-import { connectWallet, isWalletConnected, getCurrentWalletAddress } from '../utils/walletConnector';
-
+import { connectWallet, isWalletConnected, getCurrentWalletAddress, getAvailableWallets } from '../utils/walletConnector';
 
 export default function WalletConnect({ onConnect }) {
   const { t } = useTranslation();
   const [connected, setConnected] = useState(false);
   const [address, setAddress] = useState(null);
-  const [isMobile, setIsMobile] = useState(false);
   const [checkingWallet, setCheckingWallet] = useState(false);
+  const [wallets, setWallets] = useState([]);
+  const [showWalletModal, setShowWalletModal] = useState(false);
 
   useEffect(() => {
-    // Detect mobile devices
-    const checkIsMobile = () => {
-      setIsMobile(/iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    const loadWallets = async () => {
+      const availableWallets = await getAvailableWallets();
+      setWallets(availableWallets);
     };
-    
-    checkIsMobile();
-    window.addEventListener('resize', checkIsMobile);
-    return () => window.removeEventListener('resize', checkIsMobile);
+
+    loadWallets();
+
+    const handleFocus = () => loadWallets();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
-  // Check if wallet is already connected on component mount
   useEffect(() => {
     const checkExistingConnection = async () => {
       try {
@@ -44,28 +44,25 @@ export default function WalletConnect({ onConnect }) {
     checkExistingConnection();
   }, []);
 
-  const connect = async () => {
+  const connect = async (walletType = null) => {
     if (typeof window === "undefined") return;
-    
+
     setCheckingWallet(true);
 
     try {
-      // Use the new wallet connector
-      const connectionResult = await connectWallet();
-      
+      const connectionResult = await connectWallet(walletType);
+
       setAddress(connectionResult.address);
       setConnected(true);
-      
-      // Update global provider and contract instance with the user's provider
+      setShowWalletModal(false);
+
       updateProvider(connectionResult.provider);
       updateContractInstance(connectionResult.provider);
-      
-      // Pass the connection details to the parent component
+
       onConnect && onConnect(connectionResult.address, connectionResult.provider, connectionResult.signer);
     } catch (error) {
       console.error("Wallet connection error:", error);
-      // Provide more user-friendly error message
-      const userMessage = error.message.includes('No active wallet found') 
+      const userMessage = error.message.includes('No active wallet found')
         ? "Wallet connection failed. Please make sure your wallet is unlocked and connected to the Polygon network. If using MetaMask, check that it's properly installed and enabled."
         : error.message;
       alert(`Wallet connection failed: ${userMessage}`);
@@ -74,15 +71,62 @@ export default function WalletConnect({ onConnect }) {
     }
   };
 
+  const openWalletSelector = async () => {
+    const availableWallets = await getAvailableWallets();
+    setWallets(availableWallets);
+
+    if (availableWallets.length <= 1) {
+      await connect(availableWallets[0]?.walletType ?? null);
+      return;
+    }
+
+    setShowWalletModal(true);
+  };
+
   return (
     <>
       <button
-        onClick={connect}
+        onClick={openWalletSelector}
         className={styles.connectButton}
+        disabled={checkingWallet}
       >
         <span>🔒</span>
-        {connected ? (address ? `${address.slice(0,6)}…${address.slice(-4)}` : t("connected","Connected")) : t("connectWallet","Connect Wallet")}
+        {checkingWallet
+          ? t("processing", "Processing...")
+          : connected
+            ? (address ? `${address.slice(0, 6)}…${address.slice(-4)}` : t("connected", "Connected"))
+            : t("connectWallet", "Connect Wallet")}
       </button>
+
+      {showWalletModal && (
+        <div className={styles.modalOverlay} onClick={() => !checkingWallet && setShowWalletModal(false)}>
+          <div className={styles.walletModal} onClick={(event) => event.stopPropagation()}>
+            <h3>{t("selectWallet", "Select wallet")}</h3>
+            <div className={styles.walletList}>
+              {wallets.map((wallet) => (
+                <button
+                  type="button"
+                  key={wallet.key}
+                  className={styles.walletOption}
+                  onClick={() => connect(wallet.key)}
+                  disabled={checkingWallet}
+                >
+                  <span className={styles.walletIcon}>{wallet.icon}</span>
+                  <span className={styles.walletName}>{wallet.name}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className={styles.cancelButton}
+              onClick={() => setShowWalletModal(false)}
+              disabled={checkingWallet}
+            >
+              {t("cancel", "Cancel")}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
