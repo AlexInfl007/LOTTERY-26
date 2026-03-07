@@ -110,12 +110,6 @@ export default function WalletConnect({ onConnect }) {
   const openWalletSelector = async () => {
     const availableWallets = await getAvailableWallets();
     setWallets(availableWallets);
-
-    if (availableWallets.length === 1) {
-      await connect(availableWallets[0]?.walletType ?? null);
-      return;
-    }
-
     setShowWalletModal(true);
   };
 
@@ -138,6 +132,8 @@ export default function WalletConnect({ onConnect }) {
         <div className={styles.modalOverlay} onClick={() => !checkingWallet && setShowWalletModal(false)}>
           <div className={styles.walletModal} onClick={(event) => event.stopPropagation()}>
             <h3>{t("selectWallet", "Select wallet")}</h3>
+
+            <div className={styles.walletSectionTitle}>{t('walletBrowserOptions', 'Available in this browser')}</div>
             {wallets.length > 0 ? (
               <div className={styles.walletList}>
                 {wallets.map((wallet) => (
@@ -150,28 +146,33 @@ export default function WalletConnect({ onConnect }) {
                   >
                     <span className={styles.walletIcon}>{wallet.icon}</span>
                     <span className={styles.walletName}>{wallet.name}</span>
+                    <span className={styles.walletMeta}>{t('walletDetected', 'Detected')}</span>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className={styles.walletList}>
-                <div className={styles.walletHint}>
-                  {t('walletNotDetected', 'No injected wallet detected in this browser. Open this dApp via a wallet app:')}
-                </div>
-                {MOBILE_WALLET_LINKS.map((wallet) => (
-                  <a
-                    key={wallet.key}
-                    className={styles.walletOption}
-                    href={wallet.getUrl(dappUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <span className={styles.walletIcon}>{wallet.icon}</span>
-                    <span className={styles.walletName}>{wallet.name}</span>
-                  </a>
-                ))}
+              <div className={styles.walletHint}>
+                {t('walletNotDetected', 'No injected wallet detected in this browser.')}
               </div>
             )}
+
+            <div className={styles.walletSectionTitle}>{t('walletMobileOptions', 'Open dApp in wallet app (mobile/tablet)')}</div>
+            <div className={styles.walletList}>
+              {MOBILE_WALLET_LINKS.map((wallet) => (
+                <a
+                  key={wallet.key}
+                  className={styles.walletOption}
+                  href={wallet.getUrl(dappUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span className={styles.walletIcon}>{wallet.icon}</span>
+                  <span className={styles.walletName}>{wallet.name}</span>
+                  <span className={styles.walletMeta}>{t('walletOpen', 'Open')}</span>
+                </a>
+              ))}
+            </div>
+
             <button
               type="button"
               className={styles.cancelButton}
