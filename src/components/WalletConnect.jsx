@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
@@ -18,6 +19,18 @@ export default function WalletConnect({ onConnect }) {
   const [checkingWallet, setCheckingWallet] = useState(false);
   const [wallets, setWallets] = useState([]);
   const [showWalletModal, setShowWalletModal] = useState(false);
+
+
+  useEffect(() => {
+    if (!showWalletModal) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showWalletModal]);
 
   const dappUrl = useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -128,7 +141,7 @@ export default function WalletConnect({ onConnect }) {
             : t("connectWallet", "Connect Wallet")}
       </button>
 
-      {showWalletModal && (
+      {showWalletModal && typeof document !== 'undefined' && createPortal(
         <div className={styles.modalOverlay} onClick={() => !checkingWallet && setShowWalletModal(false)}>
           <div className={styles.walletModal} onClick={(event) => event.stopPropagation()}>
             <h3>{t("selectWallet", "Select wallet")}</h3>
@@ -182,7 +195,8 @@ export default function WalletConnect({ onConnect }) {
               {t("cancel", "Cancel")}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
