@@ -332,6 +332,43 @@ export const connectWallet = async (selectedWalletType = null) => {
   }
 };
 
+
+export const restoreWalletSession = async () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const ethereum = await getPreferredProvider();
+    if (!ethereum) return null;
+
+    const accounts = await ethereum.request({ method: 'eth_accounts' });
+    if (!accounts || accounts.length === 0) {
+      return null;
+    }
+
+    const provider = new ethers.BrowserProvider(ethereum);
+    const signer = await provider.getSigner();
+
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== 137) {
+      return null;
+    }
+
+    setSharedProvider(provider);
+    await initializeContract();
+
+    return {
+      address: accounts[0],
+      provider,
+      signer,
+      ethereum
+    };
+  } catch {
+    return null;
+  }
+};
+
 export const disconnectWallet = async () => {
   if (typeof window !== 'undefined') {
     try {

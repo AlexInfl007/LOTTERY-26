@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
-import { connectWallet, isWalletConnected, getCurrentWalletAddress, getAvailableWallets } from '../utils/walletConnector';
+import { connectWallet, isWalletConnected, getCurrentWalletAddress, getAvailableWallets, restoreWalletSession } from '../utils/walletConnector';
 
 const MOBILE_WALLET_LINKS = [
   { key: 'metamask-mobile', icon: '🦊', name: 'MetaMask', getUrl: (dappUrl) => `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}` },
@@ -54,12 +54,20 @@ export default function WalletConnect({ onConnect }) {
     const checkExistingConnection = async () => {
       try {
         const isConnected = await isWalletConnected();
-        if (isConnected) {
-          const currentAddress = await getCurrentWalletAddress();
-          if (currentAddress) {
-            setAddress(currentAddress);
-            setConnected(true);
-          }
+        if (!isConnected) return;
+
+        const restoredSession = await restoreWalletSession();
+        if (restoredSession?.address) {
+          setAddress(restoredSession.address);
+          setConnected(true);
+          onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
+          return;
+        }
+
+        const currentAddress = await getCurrentWalletAddress();
+        if (currentAddress) {
+          setAddress(currentAddress);
+          setConnected(true);
         }
       } catch {
         // Silent check
@@ -92,7 +100,7 @@ export default function WalletConnect({ onConnect }) {
       window.ethereum?.removeListener?.('accountsChanged', onAccountsChanged);
       window.ethereum?.removeListener?.('chainChanged', onChainChanged);
     };
-  }, []);
+  }, [onConnect]);
 
   const connect = async (walletType = null) => {
     if (typeof window === "undefined") return;

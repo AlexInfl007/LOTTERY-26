@@ -35,8 +35,11 @@ export default function App() {
       // Check if wallet is connected
       const currentProvider = await getCurrentProvider();
       if (!currentProvider) {
-        // If no wallet connected, set loading to false and return
         if (mounted) {
+          setPoolAmount(null);
+          setTicketsBought(null);
+          setWinners(null);
+          setMyTickets(0);
           setLoading(false);
         }
         return;
@@ -115,7 +118,7 @@ export default function App() {
       unsubscribeTicketRef.current();
       unsubscribeWinnerRef.current();
     };
-  }, []);
+  }, [walletAddress]);
 
   // Periodically update the prize pool to reflect new contributions when wallet is connected
   useEffect(() => {
@@ -152,7 +155,7 @@ export default function App() {
         clearTimeout(intervalId);
       }
     };
-  }, []);
+  }, [walletAddress]);
 
   // Update user's tickets when wallet connects
   useEffect(() => {
