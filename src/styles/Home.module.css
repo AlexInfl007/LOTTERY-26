@@ -127,6 +127,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  justify-content: space-between;
   transition: all 0.2s ease;
   min-width: 130px;
   justify-content: space-between;
@@ -237,25 +238,27 @@
 /* Wallet selection modal overlay */
 .modalOverlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2147483647;
   backdrop-filter: blur(5px);
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  isolation: isolate;
 }
+
 
 .walletModal {
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 1.5rem;
-  width: 90%;
-  max-width: 400px;
+  padding: 1.25rem;
+  width: min(100%, 480px);
+  max-height: min(90vh, 760px);
+  overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   animation: modalAppear 0.3s ease-out;
 }
@@ -279,11 +282,27 @@
   font-weight: 700;
 }
 
+.walletSectionTitle {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.6rem;
+}
+
 .walletList {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
+}
+
+.walletHint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: left;
 }
 
 .walletOption {
@@ -294,11 +313,14 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  justify-content: space-between;
   cursor: pointer;
   transition: all 0.2s ease;
   color: var(--text-primary);
   font-weight: 600;
+  text-decoration: none;
 }
+
 
 .walletOption:hover {
   background: rgba(255, 255, 255, 0.1);
@@ -314,6 +336,16 @@
 .walletName {
   flex: 1;
   text-align: left;
+  min-width: 0;
+}
+
+.walletMeta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
 }
 
 .cancelButton {
@@ -999,5 +1031,17 @@
   .subHeaderRow {
     width: 100%;
     justify-content: space-between;
+  }
+}
+
+@media (max-width: 560px) {
+  .walletModal {
+    border-radius: 16px;
+    padding: 1rem;
+    max-height: 92vh;
+  }
+
+  .walletOption {
+    padding: 0.9rem;
   }
 }

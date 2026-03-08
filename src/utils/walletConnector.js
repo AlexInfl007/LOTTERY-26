@@ -2,13 +2,12 @@ import { ethers } from 'ethers';
 import { initializeContract } from '../../utils/contractManager';
 import { setSharedProvider } from './providerStore';
 
-// Configuration for Polygon Mainnet
 const POLYGON_MAINNET_CONFIG = {
-  chainId: '0x89', // 137 in hex
+  chainId: '0x89',
   chainName: 'Polygon Mainnet',
   nativeCurrency: {
-    name: 'MATIC',
-    symbol: 'MATIC',
+    name: 'POL',
+    symbol: 'POL',
     decimals: 18
   },
   rpcUrls: ['https://polygon-rpc.com/', 'https://rpc-mainnet.matic.network'],
@@ -27,20 +26,96 @@ const WALLET_DEFINITIONS = [
   { key: 'brave', name: 'Brave Wallet', icon: '🦁', matcher: (provider) => provider?.isBraveWallet }
 ];
 
+const EIP6963_EVENT_ANNOUNCE = 'eip6963:announceProvider';
+const EIP6963_EVENT_REQUEST = 'eip6963:requestProvider';
+
 let walletCache = [];
+const eip6963ProviderMap = new Map();
+let announcedListenerAttached = false;
 
-function getRawProviders() {
-  if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') return [];
-
-  if (Array.isArray(window.ethereum.providers) && window.ethereum.providers.length > 0) {
-    return window.ethereum.providers;
+function safeReadStorage(key) {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage?.getItem(key) || null;
+  } catch {
+    return null;
   }
-
-  return [window.ethereum];
 }
 
-function buildUnknownWalletKey(provider, index) {
+function safeWriteStorage(key, value) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage?.setItem(key, value);
+  } catch {
+    // Ignore storage write failures (private mode / strict settings)
+  }
+}
+
+function attachEip6963Listener() {
+  if (typeof window === 'undefined' || announcedListenerAttached) return;
+
+  window.addEventListener(EIP6963_EVENT_ANNOUNCE, (event) => {
+    const detail = event?.detail;
+    const provider = detail?.provider;
+    if (!provider) return;
+
+    const info = detail?.info || {};
+    const rdns = info?.rdns || provider?.rdns || provider?.id || info?.name || `wallet-${eip6963ProviderMap.size + 1}`;
+    eip6963ProviderMap.set(rdns, { provider, info });
+  });
+
+  announcedListenerAttached = true;
+}
+
+function waitForEip6963Providers(timeout = 400) {
+  if (typeof window === 'undefined') return Promise.resolve();
+
+  attachEip6963Listener();
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    setTimeout(finish, timeout);
+
+    try {
+      window.dispatchEvent(new Event(EIP6963_EVENT_REQUEST));
+    } catch {
+      finish();
+    }
+  });
+}
+
+function getRawProviders() {
+  if (typeof window === 'undefined') return [];
+
+  const providers = [];
+  const globalEthereum = window.ethereum;
+
+  if (globalEthereum) {
+    if (Array.isArray(globalEthereum.providers) && globalEthereum.providers.length > 0) {
+      providers.push(...globalEthereum.providers.map((provider) => ({ provider, info: null })));
+    } else {
+      providers.push({ provider: globalEthereum, info: null });
+    }
+  }
+
+  eip6963ProviderMap.forEach(({ provider, info }) => {
+    providers.push({ provider, info });
+  });
+
+  return providers;
+}
+
+function buildUnknownWalletKey(provider, info, index) {
   const parts = [
+    info?.rdns,
+    info?.name,
     provider?.rdns,
     provider?.id,
     provider?.name,
@@ -63,15 +138,15 @@ function buildUnknownWalletKey(provider, index) {
   return `injected-${normalized || index + 1}`;
 }
 
-function detectWalletMetadata(provider, index) {
+function detectWalletMetadata(provider, info, index) {
   const knownWallet = WALLET_DEFINITIONS.find((wallet) => wallet.matcher(provider));
   if (knownWallet) {
     return knownWallet;
   }
 
   return {
-    key: buildUnknownWalletKey(provider, index),
-    name: provider?.name || provider?.providerName || 'Injected Wallet',
+    key: buildUnknownWalletKey(provider, info, index),
+    name: info?.name || provider?.name || provider?.providerName || 'Injected Wallet',
     icon: '👛'
   };
 }
@@ -82,11 +157,11 @@ function getAvailableWalletEntries() {
   const seenProvider = new Set();
   const keyCount = new Map();
 
-  providers.forEach((provider, index) => {
+  providers.forEach(({ provider, info }, index) => {
     if (!provider || seenProvider.has(provider)) return;
     seenProvider.add(provider);
 
-    const walletMeta = detectWalletMetadata(provider, index);
+    const walletMeta = detectWalletMetadata(provider, info, index);
     const baseKey = walletMeta.key;
     const duplicates = keyCount.get(baseKey) || 0;
     keyCount.set(baseKey, duplicates + 1);
@@ -105,13 +180,17 @@ function getAvailableWalletEntries() {
   return entries;
 }
 
-// Function to wait for wallet extensions to initialize
 async function waitForWalletInitialization(timeout = 1500) {
+  if (typeof window === 'undefined') return;
+
+  attachEip6963Listener();
+  await waitForEip6963Providers(450);
+
   return new Promise((resolve) => {
     const startTime = Date.now();
 
     const checkProvider = () => {
-      if (window.ethereum && (window.ethereum.providers || window.ethereum.isMetaMask || window.ethereum.isCoinbaseWallet || window.ethereum.isTrustWallet || window.ethereum.isBraveWallet || window.ethereum.isPhantom || window.ethereum.isRabby || window.ethereum.isOkxWallet || window.ethereum.isBinance || window.ethereum.isTokenPocket)) {
+      if (window.ethereum || eip6963ProviderMap.size > 0) {
         resolve();
         return;
       }
@@ -128,7 +207,7 @@ async function waitForWalletInitialization(timeout = 1500) {
 }
 
 export async function getAvailableWallets() {
-  if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') {
+  if (typeof window === 'undefined') {
     return [];
   }
 
@@ -136,16 +215,16 @@ export async function getAvailableWallets() {
   return getAvailableWalletEntries().map(({ key, walletType, name, icon }) => ({ key, walletType, name, icon }));
 }
 
-// Function to detect and return the preferred provider
 async function getPreferredProvider(selectedWalletType) {
-  if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') {
+  if (typeof window === 'undefined') {
     return null;
   }
 
   await waitForWalletInitialization(1500);
 
-  if (selectedWalletType && walletCache.length > 0) {
-    const selectedFromCache = walletCache.find((entry) => entry.key === selectedWalletType || entry.walletType === selectedWalletType);
+  const explicitSelection = selectedWalletType || safeReadStorage('selectedWalletType');
+  if (explicitSelection && walletCache.length > 0) {
+    const selectedFromCache = walletCache.find((entry) => entry.key === explicitSelection || entry.walletType === explicitSelection);
     if (selectedFromCache) {
       return selectedFromCache.provider;
     }
@@ -154,15 +233,14 @@ async function getPreferredProvider(selectedWalletType) {
   const entries = getAvailableWalletEntries();
   if (entries.length === 0) return null;
 
-  if (selectedWalletType) {
-    const selected = entries.find((entry) => entry.key === selectedWalletType || entry.walletType === selectedWalletType);
+  if (explicitSelection) {
+    const selected = entries.find((entry) => entry.key === explicitSelection || entry.walletType === explicitSelection);
     if (selected) return selected.provider;
   }
 
   return entries[0].provider;
 }
 
-// Function to switch to Polygon network
 export const switchToPolygonNetwork = async (ethereumProvider) => {
   try {
     await ethereumProvider.request({
@@ -179,19 +257,16 @@ export const switchToPolygonNetwork = async (ethereumProvider) => {
         });
         return true;
       } catch (addError) {
-        console.error('Error adding Polygon network:', addError);
         throw addError;
       }
     } else if (switchError.code === -32002) {
       throw new Error('Network switch request already pending. Please check your wallet and approve/reject the existing request.');
     } else {
-      console.error('Error switching to Polygon network:', switchError);
       throw switchError;
     }
   }
 };
 
-// Main wallet connection function
 export const connectWallet = async (selectedWalletType = null) => {
   if (typeof window === 'undefined') {
     throw new Error('Window object not available');
@@ -200,18 +275,12 @@ export const connectWallet = async (selectedWalletType = null) => {
   const ethereum = await getPreferredProvider(selectedWalletType);
 
   if (!ethereum) {
-    throw new Error('No crypto wallet found. Please install a wallet like MetaMask, Trust Wallet, or Coinbase Wallet.');
+    throw new Error('No crypto wallet found. Please install a wallet app/extension and try again.');
   }
 
   try {
-    try {
-      await ethereum.request({ method: 'eth_chainId' });
-    } catch (error) {
-      console.error('Wallet provider is not responding:', error);
-      throw new Error('Wallet provider is not responding. Please make sure your wallet is unlocked and ready before connecting.');
-    }
+    await ethereum.request({ method: 'eth_chainId' });
 
-    // Request account access before chain switch (some wallets require active account first)
     const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
 
     if (!accounts || accounts.length === 0) {
@@ -229,10 +298,61 @@ export const connectWallet = async (selectedWalletType = null) => {
       throw new Error(`Please switch to Polygon Mainnet in your wallet. Current network: ${network.name || chainId}`);
     }
 
-    try {
-      await provider.getCode('0x0000000000000000000000000000000000000000');
-    } catch (testError) {
-      console.warn('Provider test failed, but continuing with connection:', testError);
+    setSharedProvider(provider);
+    await initializeContract();
+
+    if (selectedWalletType) {
+      safeWriteStorage('selectedWalletType', selectedWalletType);
+    }
+
+    safeWriteStorage('connectedWallet', accounts[0]);
+
+    return {
+      address: accounts[0],
+      provider,
+      signer,
+      ethereum
+    };
+  } catch (error) {
+    let errorMessage = error.message || 'Unknown wallet connection error';
+
+    if (error.code === 4001) {
+      errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
+    } else if (error.code === -32002) {
+      errorMessage = 'Request already pending. Check your wallet extension/app and approve or reject the existing request.';
+    } else if (error.code === -32603) {
+      errorMessage = 'Wallet connection failed. Please make sure your wallet is unlocked and accessible.';
+    } else if (errorMessage.includes('network')) {
+      errorMessage = 'Network switch failed. Please check your wallet settings and ensure Polygon network is added.';
+    } else if (errorMessage.includes('user rejected')) {
+      errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
+    }
+
+    throw new Error(errorMessage);
+  }
+};
+
+
+export const restoreWalletSession = async () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const ethereum = await getPreferredProvider();
+    if (!ethereum) return null;
+
+    const accounts = await ethereum.request({ method: 'eth_accounts' });
+    if (!accounts || accounts.length === 0) {
+      return null;
+    }
+
+    const provider = new ethers.BrowserProvider(ethereum);
+    const signer = await provider.getSigner();
+
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== 137) {
+      return null;
     }
 
     setSharedProvider(provider);
@@ -244,72 +364,51 @@ export const connectWallet = async (selectedWalletType = null) => {
       signer,
       ethereum
     };
-  } catch (error) {
-    console.error('Wallet connection error:', error);
-
-    let errorMessage = error.message || 'Unknown wallet connection error';
-
-    if (error.code === 4001) {
-      errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
-    } else if (error.code === -32002) {
-      errorMessage = 'Request already pending. Check your wallet extension and approve or reject the existing request.';
-    } else if (error.code === -32603) {
-      errorMessage = 'Wallet connection failed: No active wallet found. Please make sure your wallet is unlocked and ready. If using MetaMask, please ensure it is unlocked and connected to the Polygon network. Try refreshing the page and make sure your wallet extension is properly installed and enabled.';
-    } else if (error.code === -32075) {
-      errorMessage = 'Method disabled. This may be due to browser restrictions or wallet configuration.';
-    } else if (errorMessage.includes('network')) {
-      errorMessage = 'Network switch failed. Please check your wallet settings and ensure Polygon network is added.';
-    } else if (errorMessage.includes('user rejected')) {
-      errorMessage = 'Connection was cancelled by the user. Please try again and approve the connection in your wallet.';
-    } else if (errorMessage.includes('invalid json rpc')) {
-      errorMessage = 'Invalid JSON-RPC response. Make sure your wallet is unlocked and properly configured.';
-    } else if (errorMessage.includes('No active wallet found')) {
-      errorMessage = 'No active wallet found. Please make sure your wallet is unlocked and ready before connecting. If using MetaMask, check that it is unlocked and connected to the Polygon network.';
-    } else if (errorMessage.includes('does not support specified chain')) {
-      errorMessage = 'Current wallet does not support the required network. Please switch to a supported network in your wallet settings.';
-    } else if (errorMessage.includes('unauthorized')) {
-      errorMessage = 'Wallet connection unauthorized. Please check your wallet permissions and try again.';
-    } else if (errorMessage.includes('disconnected')) {
-      errorMessage = 'Wallet disconnected during connection. Please reconnect and try again.';
-    } else if (errorMessage.includes('execution failed')) {
-      errorMessage = 'Wallet connection execution failed. Please make sure your wallet is unlocked and properly configured.';
-    } else if (error.message?.includes('Failed to fetch dynamically imported module')) {
-      errorMessage = 'Wallet connection failed due to a module loading issue. Please refresh the page and try again.';
-    }
-
-    throw new Error(errorMessage);
+  } catch {
+    return null;
   }
 };
 
 export const disconnectWallet = async () => {
-  localStorage.removeItem('connectedWallet');
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.removeItem('connectedWallet');
+      window.localStorage.removeItem('selectedWalletType');
+    } catch {
+      // Ignore storage failures
+    }
+  }
   return true;
 };
 
 export const isWalletConnected = async () => {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  if (typeof window === 'undefined') {
     return false;
   }
 
   try {
-    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    const ethereum = await getPreferredProvider();
+    if (!ethereum) return false;
+
+    const accounts = await ethereum.request({ method: 'eth_accounts' });
     return accounts && accounts.length > 0;
-  } catch (error) {
-    console.warn('Error checking wallet connection:', error);
+  } catch {
     return false;
   }
 };
 
 export const getCurrentWalletAddress = async () => {
-  if (typeof window === 'undefined' || !window.ethereum) {
+  if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    const ethereum = await getPreferredProvider();
+    if (!ethereum) return null;
+
+    const accounts = await ethereum.request({ method: 'eth_accounts' });
     return accounts && accounts.length > 0 ? accounts[0] : null;
-  } catch (error) {
-    console.warn('Error getting current wallet address:', error);
+  } catch {
     return null;
   }
 };

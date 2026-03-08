@@ -10,7 +10,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider, SUPPORTS_TICKET_EVENTS, SUPPORTS_HISTORICAL_WINNERS } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider, SUPPORTS_HISTORICAL_WINNERS } from "./utils/ethersUtils";
 
 export default function App() {
   const { t } = useTranslation();
@@ -26,6 +26,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
+  const lastObservedTicketsRef = useRef(null);
 
   // Initialize data from smart contract when wallet is connected
   useEffect(() => {
@@ -35,8 +36,13 @@ export default function App() {
       // Check if wallet is connected
       const currentProvider = await getCurrentProvider();
       if (!currentProvider) {
-        // If no wallet connected, set loading to false and return
         if (mounted) {
+          setPoolAmount(null);
+          setTicketsBought(null);
+          setWinners(null);
+          setMyTickets(0);
+          setFeed([]);
+          lastObservedTicketsRef.current = null;
           setLoading(false);
         }
         return;
@@ -82,17 +88,16 @@ export default function App() {
         // Get initial tickets count from contract
         const initialTicketsCount = await getTicketsCount();
         setTicketsBought(initialTicketsCount);
+        lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
         
         // Get recent winners from contract
         const recentWinners = await getRecentWinners();
         setWinners(recentWinners);
         
-        if (SUPPORTS_TICKET_EVENTS) {
-          unsubscribeTicketRef.current = await watchTicketEvents((eventMessage) => {
-            setFeed(prev => [eventMessage, ...prev].slice(0,15));
-            setTicketsBought(t => t + 1);
-          });
-        }
+        unsubscribeTicketRef.current = await watchTicketEvents((eventMessage) => {
+          setFeed(prev => [eventMessage, ...prev].slice(0,15));
+          setTicketsBought(t => (typeof t === 'number' ? t + 1 : 1));
+        });
 
         unsubscribeWinnerRef.current = watchWinnerEvents && typeof watchWinnerEvents === 'function'
           ? await watchWinnerEvents((winnerData) => {
@@ -115,7 +120,7 @@ export default function App() {
       unsubscribeTicketRef.current();
       unsubscribeWinnerRef.current();
     };
-  }, []);
+  }, [walletAddress]);
 
   // Periodically update the prize pool to reflect new contributions when wallet is connected
   useEffect(() => {
@@ -132,6 +137,27 @@ export default function App() {
       try {
         const updatedPool = await readPrizePool();
         setPoolAmount(updatedPool);
+
+        const updatedTicketsCount = await getTicketsCount();
+        if (typeof updatedTicketsCount === 'number') {
+          setTicketsBought(updatedTicketsCount);
+
+          const previousCount = lastObservedTicketsRef.current;
+          if (typeof previousCount === 'number' && updatedTicketsCount > previousCount) {
+            const newPurchases = updatedTicketsCount - previousCount;
+            const timestamp = new Date().toLocaleTimeString();
+
+            setFeed((previousFeed) => {
+              const newEvents = Array.from({ length: Math.min(newPurchases, 5) }, (_, index) => (
+                `${t('events.ticketPurchased', 'New ticket purchased')} #${previousCount + index + 1} • ${timestamp}`
+              ));
+
+              return [...newEvents, ...previousFeed].slice(0, 15);
+            });
+          }
+
+          lastObservedTicketsRef.current = updatedTicketsCount;
+        }
       } catch (error) {
         console.error("Error updating prize pool:", error);
       }
@@ -152,7 +178,7 @@ export default function App() {
         clearTimeout(intervalId);
       }
     };
-  }, []);
+  }, [walletAddress, t]);
 
   // Update user's tickets when wallet connects
   useEffect(() => {
@@ -299,7 +325,7 @@ export default function App() {
 
           <div className={styles.sideCard}>
             <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
-            {SUPPORTS_TICKET_EVENTS ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>On-chain ticket events are unavailable in current contract ABI.</div>}
+            {feed.length > 0 ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>{t("liveFeedWaiting", "No purchase activity yet — live updates will appear here.")}</div>}
           </div>
         </div>
       </main>
