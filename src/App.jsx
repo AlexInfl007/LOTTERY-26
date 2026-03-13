@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import PoolProgressBar from "./components/PoolProgressBar";
@@ -10,8 +10,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, watchPrizePoolUpdates, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider } from "./utils/ethersUtils";
-import { ethers } from 'ethers';
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider, SUPPORTS_TICKET_EVENTS, SUPPORTS_HISTORICAL_WINNERS } from "./utils/ethersUtils";
 
 export default function App() {
   const { t } = useTranslation();
@@ -25,6 +24,8 @@ export default function App() {
   const [walletAddress, setWalletAddress] = useState(null);
   const [signer, setSigner] = useState(null);
   const [loading, setLoading] = useState(true);
+  const unsubscribeTicketRef = useRef(() => {});
+  const unsubscribeWinnerRef = useRef(() => {});
 
   // Initialize data from smart contract when wallet is connected
   useEffect(() => {
@@ -86,32 +87,18 @@ export default function App() {
         const recentWinners = await getRecentWinners();
         setWinners(recentWinners);
         
-        // Set up event listener for ticket purchases
-        const unsubscribeTicket = await watchTicketEvents((eventMessage) => {
-          setFeed(prev => [eventMessage, ...prev].slice(0,15));
-          // Also increment tickets bought counter when we receive a ticket purchase event
-          setTicketsBought(t => t + 1);
-        });
-        
-        // Set up event listener for winner selections
-        const unsubscribeWinner = watchWinnerEvents && typeof watchWinnerEvents === 'function' 
+        if (SUPPORTS_TICKET_EVENTS) {
+          unsubscribeTicketRef.current = await watchTicketEvents((eventMessage) => {
+            setFeed(prev => [eventMessage, ...prev].slice(0,15));
+            setTicketsBought(t => t + 1);
+          });
+        }
+
+        unsubscribeWinnerRef.current = watchWinnerEvents && typeof watchWinnerEvents === 'function'
           ? await watchWinnerEvents((winnerData) => {
               setWinners(prev => [winnerData, ...prev].slice(0, 15));
             })
           : () => {};
-        
-        // Set up event listener for prize pool updates
-        const poolUnsubscribe = await watchPrizePoolUpdates((updatedPool) => {
-          setPoolAmount(updatedPool);
-        });
-        
-        // Cleanup subscriptions
-        return () => {
-          mounted = false;
-          unsubscribeTicket();
-          unsubscribeWinner();
-          poolUnsubscribe();
-        };
       } catch (error) {
         console.error("Error initializing data:", error);
       } finally {
@@ -125,6 +112,8 @@ export default function App() {
     
     return () => {
       mounted = false;
+      unsubscribeTicketRef.current();
+      unsubscribeWinnerRef.current();
     };
   }, []);
 
@@ -295,7 +284,12 @@ export default function App() {
 
         <div className={styles.rightColumn}>
           {winners !== null ? (
-            <Winners winners={winners} />
+            SUPPORTS_HISTORICAL_WINNERS || (winners && winners.length > 0) ? <Winners winners={winners} /> : (
+              <div className={styles.winnersPlaceholder}>
+                <h4 className={styles.sideTitle}>🏆 {t("recentWinners", "Последние победители")}</h4>
+                <div className={styles.placeholderText}>Winner history is unavailable in current contract ABI.</div>
+              </div>
+            )
           ) : (
             <div className={styles.winnersPlaceholder}>
               <h4 className={styles.sideTitle}>🏆 {t("recentWinners", "Последние победители")}</h4>
@@ -305,7 +299,7 @@ export default function App() {
 
           <div className={styles.sideCard}>
             <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
-            <LiveFeed events={feed} />
+            {SUPPORTS_TICKET_EVENTS ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>On-chain ticket events are unavailable in current contract ABI.</div>}
           </div>
         </div>
       </main>
