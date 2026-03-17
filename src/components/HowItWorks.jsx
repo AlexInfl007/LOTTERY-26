@@ -2,10 +2,9 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import styles from "../styles/Home.module.css";
 
-export default function HowItWorks() {
+export default function HowItWorks({ onReadMore }) {
   const { t } = useTranslation();
 
-  // Try to read structured steps; fallback to default texts
   const steps = t("howSteps", { returnObjects: true });
   const hasSteps = Array.isArray(steps) && steps.length === 3;
 
@@ -19,15 +18,20 @@ export default function HowItWorks() {
           { title: t("howSteps.1.title", "Жди своего звездного часа"), text: t("howSteps.1.text", "Пул растет...") },
           { title: t("howSteps.2.title", "Победа!"), text: t("howSteps.2.text", "Chainlink VRF...") }
         ]), {
-          title: t("howSteps.3.title", "Read more about project"),
-          text: "",
+          title: t("readMoreProject", "Read more about project"),
+          text: t("readMoreProjectHint", "Open detailed description, transparency and technical architecture"),
           isLink: true
         }].map((s, i) => (
-          <div className={`${styles.howCard} ${s.isLink ? styles.howCardLink : ''}`} key={i}>
+          <button
+            type="button"
+            onClick={s.isLink ? onReadMore : undefined}
+            className={`${styles.howCard} ${s.isLink ? styles.howCardLink : ''}`}
+            key={i}
+          >
             {!s.isLink && <div className={styles.howNumber}>{i+1}</div>}
             <div className={styles.howCardTitle}>{s.title}</div>
             <div className={styles.howText}>{s.text}</div>
-          </div>
+          </button>
         ))}
       </div>
     </section>
