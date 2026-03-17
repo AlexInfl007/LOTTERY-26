@@ -54,7 +54,11 @@ export default function WalletConnect({ onConnect }) {
     const checkExistingConnection = async () => {
       try {
         const isConnected = await isWalletConnected();
-        if (!isConnected) return;
+        if (!isConnected) {
+          setConnected(false);
+          setAddress(null);
+          return;
+        }
 
         const restoredSession = await restoreWalletSession();
         if (restoredSession?.address) {
@@ -68,9 +72,14 @@ export default function WalletConnect({ onConnect }) {
         if (currentAddress) {
           setAddress(currentAddress);
           setConnected(true);
+          return;
         }
+
+        setConnected(false);
+        setAddress(null);
       } catch {
-        // Silent check
+        setConnected(false);
+        setAddress(null);
       }
     };
 
@@ -93,12 +102,20 @@ export default function WalletConnect({ onConnect }) {
       window.location.reload();
     };
 
+    const onVisibilityOrFocus = () => {
+      checkExistingConnection();
+    };
+
     window.ethereum.on?.('accountsChanged', onAccountsChanged);
     window.ethereum.on?.('chainChanged', onChainChanged);
+    window.addEventListener('focus', onVisibilityOrFocus);
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
 
     return () => {
       window.ethereum?.removeListener?.('accountsChanged', onAccountsChanged);
       window.ethereum?.removeListener?.('chainChanged', onChainChanged);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
     };
   }, [onConnect]);
 

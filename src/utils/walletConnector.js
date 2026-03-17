@@ -33,6 +33,21 @@ let walletCache = [];
 const eip6963ProviderMap = new Map();
 let announcedListenerAttached = false;
 
+async function isProviderUnlocked(ethereum) {
+  if (!ethereum) return false;
+
+  try {
+    const unlockApi = ethereum?._metamask?.isUnlocked;
+    if (typeof unlockApi === 'function') {
+      return await unlockApi.call(ethereum._metamask);
+    }
+  } catch {
+    return false;
+  }
+
+  return true;
+}
+
 function safeReadStorage(key) {
   if (typeof window === 'undefined') return null;
   try {
@@ -342,6 +357,9 @@ export const restoreWalletSession = async () => {
     const ethereum = await getPreferredProvider();
     if (!ethereum) return null;
 
+    const unlocked = await isProviderUnlocked(ethereum);
+    if (!unlocked) return null;
+
     const accounts = await ethereum.request({ method: 'eth_accounts' });
     if (!accounts || accounts.length === 0) {
       return null;
@@ -390,6 +408,9 @@ export const isWalletConnected = async () => {
     const ethereum = await getPreferredProvider();
     if (!ethereum) return false;
 
+    const unlocked = await isProviderUnlocked(ethereum);
+    if (!unlocked) return false;
+
     const accounts = await ethereum.request({ method: 'eth_accounts' });
     return accounts && accounts.length > 0;
   } catch {
@@ -405,6 +426,9 @@ export const getCurrentWalletAddress = async () => {
   try {
     const ethereum = await getPreferredProvider();
     if (!ethereum) return null;
+
+    const unlocked = await isProviderUnlocked(ethereum);
+    if (!unlocked) return null;
 
     const accounts = await ethereum.request({ method: 'eth_accounts' });
     return accounts && accounts.length > 0 ? accounts[0] : null;
