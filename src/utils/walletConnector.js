@@ -36,12 +36,25 @@ let announcedListenerAttached = false;
 async function isProviderUnlocked(ethereum) {
   if (!ethereum) return false;
 
+  const isMetaMaskProvider = Boolean(ethereum?.isMetaMask);
+
   try {
     const unlockApi = ethereum?._metamask?.isUnlocked;
     if (typeof unlockApi === 'function') {
       return await unlockApi.call(ethereum._metamask);
     }
   } catch {
+    return false;
+  }
+
+  if (isMetaMaskProvider) {
+    const internalUnlockedState = ethereum?._state?.isUnlocked;
+    if (typeof internalUnlockedState === 'boolean') {
+      return internalUnlockedState;
+    }
+
+    // For MetaMask we must be strict: if unlock status can't be confirmed,
+    // treat provider as locked to avoid false "connected" state in UI.
     return false;
   }
 
