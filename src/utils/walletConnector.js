@@ -380,6 +380,10 @@ export const restoreWalletSession = async () => {
 
     const provider = new ethers.BrowserProvider(ethereum);
     const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    if (!signerAddress || signerAddress.toLowerCase() !== accounts[0].toLowerCase()) {
+      return null;
+    }
 
     const network = await provider.getNetwork();
     if (Number(network.chainId) !== 137) {
@@ -425,7 +429,13 @@ export const isWalletConnected = async () => {
     if (!unlocked) return false;
 
     const accounts = await ethereum.request({ method: 'eth_accounts' });
-    return accounts && accounts.length > 0;
+    if (!accounts || accounts.length === 0) return false;
+
+    const provider = new ethers.BrowserProvider(ethereum);
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+
+    return Boolean(signerAddress && signerAddress.toLowerCase() === accounts[0].toLowerCase());
   } catch {
     return false;
   }
@@ -444,7 +454,15 @@ export const getCurrentWalletAddress = async () => {
     if (!unlocked) return null;
 
     const accounts = await ethereum.request({ method: 'eth_accounts' });
-    return accounts && accounts.length > 0 ? accounts[0] : null;
+    if (!accounts || accounts.length === 0) return null;
+
+    const provider = new ethers.BrowserProvider(ethereum);
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+
+    return signerAddress && signerAddress.toLowerCase() === accounts[0].toLowerCase()
+      ? accounts[0]
+      : null;
   } catch {
     return null;
   }
