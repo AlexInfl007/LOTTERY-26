@@ -64,11 +64,16 @@
     "deposited": "deposited 30POL into the pool",
     "bought": "bought 3 tickets",
     "depositedLarge": "deposited 90POL into the pool",
-    "depositedShort": "deposited 30POL"
+    "depositedShort": "deposited 30POL",
+    "ticketPurchased": "New ticket purchased"
   },
   "liveFeed": "Live feed:",
   "ticketsBought": "tickets bought",
   "collectingTo": "Collecting pool to",
   "eachTicketIncreases": "Each ticket increases the jackpot.",
-  "myTickets": "My tickets"
+  "myTickets": "My tickets",
+  "recentWinners": "Recent winners",
+  "winnersSubtitle": "Winner history will appear here",
+  "winnerPending": "Waiting for the first winner",
+  "liveFeedWaiting": "No purchase activity yet — live updates will appear here."
 }

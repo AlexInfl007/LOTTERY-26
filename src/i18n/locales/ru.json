@@ -61,11 +61,16 @@
     "deposited": "внес 30POL в пул",
     "bought": "купил 3 билета",
     "depositedLarge": "внес 90POL в пул",
-    "depositedShort": "внес 30POL"
+    "depositedShort": "внес 30POL",
+    "ticketPurchased": "Куплен новый билет"
   },
   "liveFeed": "Live feed:",
   "ticketsBought": "билетов куплено",
   "collectingTo": "Собираем пул до",
   "eachTicketIncreases": "Каждый билет увеличивает джекпот.",
-  "myTickets": "Мои билеты"
+  "myTickets": "Мои билеты",
+  "recentWinners": "Последние победители",
+  "winnersSubtitle": "История побед будет отображаться здесь",
+  "winnerPending": "В ожидании первого победителя",
+  "liveFeedWaiting": "Активности покупок пока нет — обновления появятся здесь."
 }

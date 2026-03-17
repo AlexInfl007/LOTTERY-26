@@ -10,7 +10,7 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider, SUPPORTS_HISTORICAL_WINNERS } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider } from "./utils/ethersUtils";
 
 export default function App() {
   const { t } = useTranslation();
@@ -309,19 +309,7 @@ export default function App() {
         </div>
 
         <div className={styles.rightColumn}>
-          {winners !== null ? (
-            SUPPORTS_HISTORICAL_WINNERS || (winners && winners.length > 0) ? <Winners winners={winners} /> : (
-              <div className={styles.winnersPlaceholder}>
-                <h4 className={styles.sideTitle}>🏆 {t("recentWinners", "Последние победители")}</h4>
-                <div className={styles.placeholderText}>Winner history is unavailable in current contract ABI.</div>
-              </div>
-            )
-          ) : (
-            <div className={styles.winnersPlaceholder}>
-              <h4 className={styles.sideTitle}>🏆 {t("recentWinners", "Последние победители")}</h4>
-              <div className={styles.placeholderText}>Please connect wallet to view winners</div>
-            </div>
-          )}
+          <Winners winners={Array.isArray(winners) ? winners : []} />
 
           <div className={styles.sideCard}>
             <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
