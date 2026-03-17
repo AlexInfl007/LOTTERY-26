@@ -4,6 +4,12 @@ import styles from "../styles/Home.module.css";
 
 const CHECK_ITEMS = ["TicketBought", "WinnerRequested", "WinnerPicked"];
 
+const shortenHex = (value) => {
+  if (typeof value !== "string") return value;
+  if (!value.startsWith("0x") || value.length < 18) return value;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+};
+
 export default function ProjectAboutPage({ onBack }) {
   const { t } = useTranslation();
 
@@ -57,7 +63,10 @@ export default function ProjectAboutPage({ onBack }) {
         <h2>{t("aboutPage.technicalTitle", "Technical specification")}</h2>
         <div className={styles.aboutGrid}>
           {Array.isArray(technical) && technical.map((row, idx) => (
-            <div key={idx} className={styles.specItem}><strong>{row.label}</strong><span>{row.value}</span></div>
+            <div key={idx} className={styles.specItem}>
+              <strong>{row.label}</strong>
+              <span className={styles.specValue} title={row.value}>{shortenHex(row.value)}</span>
+            </div>
           ))}
         </div>
       </section>

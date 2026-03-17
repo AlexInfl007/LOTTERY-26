@@ -1092,9 +1092,17 @@
 .specItem {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 1rem;
   border-bottom: 1px solid var(--border);
   padding: 0.6rem 0;
+}
+
+.specValue {
+  max-width: 58%;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  overflow-wrap: anywhere;
 }
 
 .aboutGrid {
@@ -1105,4 +1113,15 @@
 
 .aboutList {
   padding-left: 1.2rem;
+}
+
+@media (max-width: 600px) {
+  .specItem {
+    flex-direction: column;
+  }
+
+  .specValue {
+    max-width: 100%;
+    text-align: left;
+  }
 }
