@@ -30,5 +30,111 @@
       "title": "Victoire !",
       "text": "Chainlink VRF choisit un gagnant aléatoire. Le gain est envoyé automatiquement."
     }
-  ]
+  ],
+  "readMoreProject": "En savoir plus sur le projet",
+  "readMoreProjectHint": "Ouvrir la description détaillée, la transparence et l’architecture technique",
+  "aboutPage": {
+    "back": "Retour à la loterie",
+    "title": "Seren Lottery — description complète du projet",
+    "intro": [
+      "Seren Lottery a été créée pour changer définitivement l’expérience des loteries : le gagnant est choisi par la blockchain, pas par des personnes.",
+      "Chaque tirage est transparent, vérifiable et enregistré à jamais on-chain."
+    ],
+    "stepsTitle": "Comment ça marche : 3 étapes simples",
+    "threeSteps": [
+      {
+        "title": "🎟️ Étape 1 : Acheter un billet",
+        "text": "Un billet coûte 30 POL. Sans inscription ni KYC : connectez votre wallet et participez.",
+        "points": [
+          "27 POL (90 %) vont au prize pool.",
+          "3 POL (10 %) sont des frais techniques (VRF et gas)."
+        ]
+      },
+      {
+        "title": "⏳ Étape 2 : Attendre le tirage",
+        "text": "Le tour continue jusqu’à atteindre la cible du jackpot sur la page principale.",
+        "points": [
+          "L’équipe lance le tirage quand le pool est rempli.",
+          "Chaque lancement est une transaction publique visible sur Polygonscan."
+        ]
+      },
+      {
+        "title": "🏆 Étape 3 : Sélection du gagnant",
+        "text": "Le contrat demande l’aléa à Chainlink VRF et choisit le gagnant mathématiquement.",
+        "points": [
+          "Le résultat ne peut ni être prédit ni manipulé.",
+          "Le paiement du prix est immédiat on-chain."
+        ]
+      }
+    ],
+    "fairnessTitle": "Pourquoi c’est équitable",
+    "fairness": [
+      {
+        "title": "🔮 Aléa hors contrôle",
+        "text": "Chainlink VRF est indépendant ; le propriétaire ne peut pas choisir le gagnant."
+      },
+      {
+        "title": "👁️ Toutes les actions sont visibles",
+        "text": "Vous pouvez vérifier qui a lancé le tirage, quand, combien de billets et qui a gagné."
+      },
+      {
+        "title": "💰 L’économie décourage la triche",
+        "text": "Un pool plus grand soutient la croissance et des commissions durables pour le projet."
+      }
+    ],
+    "moneyTitle": "Où va l’argent ?",
+    "money": {
+      "ticket": "Vous payez",
+      "prize": "Au gagnant",
+      "fee": "Développement + gas"
+    },
+    "technicalTitle": "Spécification technique",
+    "technical": [
+      {
+        "label": "Réseau",
+        "value": "Polygon Mainnet"
+      },
+      {
+        "label": "Contrat",
+        "value": "0xf90169ad413429af4ae0a3b8962648d4a3289011"
+      },
+      {
+        "label": "Prix du billet",
+        "value": "30 POL"
+      },
+      {
+        "label": "Commission",
+        "value": "10%"
+      },
+      {
+        "label": "Solidity",
+        "value": "0.8.24"
+      },
+      {
+        "label": "Coordinateur VRF",
+        "value": "0xAE975071Be8F8eE67addBC1A82488F4C83544077"
+      }
+    ],
+    "verificationTitle": "Comment vérifier par vous-même",
+    "verify": [
+      "Ouvrez Polygonscan avec l’adresse du contrat.",
+      "Vérifiez dans Read Contract : round, ticketsCount, prizePool, open.",
+      "Ouvrez Events et consultez l’historique des tirages."
+    ],
+    "faqTitle": "Questions fréquentes",
+    "faq": [
+      {
+        "q": "Et si le propriétaire ne lance pas le tirage ?",
+        "a": "Les fonds restent dans le contrat, mais l’économie du projet encourage des tirages réguliers."
+      },
+      {
+        "q": "Le projet peut-il changer les règles ?",
+        "a": "Certaines limites sont configurables, mais le prix du billet et la commission sont fixés dans le code."
+      },
+      {
+        "q": "Et si le tirage démarre juste après mon achat ?",
+        "a": "Vous êtes inclus immédiatement ; les chances sont identiques pour tous les billets du tour."
+      }
+    ]
+  }
 }
