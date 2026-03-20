@@ -367,20 +367,30 @@
 }
 
 /* Layout: main content */
+.contentGrid {
+  display: grid;
+  grid-template-columns: 1.5fr 0.9fr;
+  gap: 2rem;
+  align-items: start;
+}
+
 .main {
   margin: 2rem auto;
   width: 100%;
   max-width: 1200px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 2rem;
   padding: 0 2rem 4rem;
 }
 
 @media (max-width: 900px) {
   .main {
-    grid-template-columns: 1fr;
     padding: 0 1rem 3rem;
+  }
+
+  .contentGrid {
+    grid-template-columns: 1fr;
   }
 }
 
