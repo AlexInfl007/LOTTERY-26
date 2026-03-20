@@ -1125,3 +1125,40 @@
     text-align: left;
   }
 }
+
+.heroIntro {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.72));
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  border-radius: 24px;
+  padding: 24px;
+  margin-bottom: 18px;
+  box-shadow: 0 12px 36px rgba(2, 6, 23, 0.24);
+}
+
+.heroEyebrow {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.heroTitle {
+  margin: 0 0 12px;
+  color: #f8fafc;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  line-height: 1.1;
+}
+
+.heroText,
+.heroTextSecondary {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.92);
+  line-height: 1.7;
+}
+
+.heroTextSecondary {
+  margin-top: 12px;
+  color: rgba(191, 219, 254, 0.84);
+}
