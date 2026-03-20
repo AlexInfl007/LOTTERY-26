@@ -293,81 +293,83 @@ export default function App() {
         <ProjectAboutPage onBack={openHomePage} />
       ) : (
         <main className={styles.main}>
-          <div className={styles.leftColumn}>
-            <section className={styles.heroIntro} aria-label="Project overview">
-              <p className={styles.heroEyebrow}>Polygon • Chainlink VRF • On-chain transparency</p>
-              <h1 className={styles.heroTitle}>Seren Lottery Chain</h1>
-              <p className={styles.heroText}>
-                {t(
-                  "seo.heroText",
-                  "Seren Lottery Chain is a transparent crypto lottery on Polygon where users can connect a wallet, track the jackpot, inspect the smart contract, and verify that winner selection is powered by Chainlink VRF."
-                )}
-              </p>
-              <p className={styles.heroTextSecondary}>
-                {t(
-                  "seo.heroTextSecondary",
-                  "The site is designed to make the prize pool, participation flow, and fairness model understandable both for users and for search engines indexing the project."
-                )}
-              </p>
-            </section>
-
-            <section className={styles.jackpotSection}>
-              <div className={styles.jackpotHeaderRow}>
-                <div>
-                  <div className={styles.jackpotTitle}>
-                    <span className={styles.jackpotIcon}>💰</span>
-                    {t("currentJackpot", "Текущий джекпот")}
-                  </div>
-                  <div className={styles.roundLabel}>Round: 1</div>
-                </div>
-                <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
-              </div>
-
-              {poolAmount !== null ? (
-                <>
-                  <PoolProgressBar current={poolAmount} goal={poolTarget} />
-
-                  <div className={styles.description}>
-                    <div className={styles.boldLine}>{t("collectingTo", "Собираем пул до")} {poolTarget.toLocaleString()} POL!</div>
-                    <div className={styles.mutedLine}>{t("eachTicketIncreases", "Каждый билет увеличивает джекпот.")}</div>
-                  </div>
-                </>
-              ) : (
-                <div className={styles.placeholderContainer}>
-                  <div className={styles.placeholderText}>Please connect wallet to view lottery data</div>
-                </div>
+          <section className={styles.heroIntro} aria-label="Project overview">
+            <p className={styles.heroEyebrow}>Polygon • Chainlink VRF • On-chain transparency</p>
+            <h1 className={styles.heroTitle}>Seren Lottery Chain</h1>
+            <p className={styles.heroText}>
+              {t(
+                "seo.heroText",
+                "Seren Lottery Chain — это прозрачная крипто-лотерея в сети Polygon, которая работает на собственном смарт контракте, где пользователь может подключить кошелек, внести монеты в общий пул, следить за джекпотом, изучить смарт-контракт и убедиться, что выбор победителя работает через Chainlink VRF."
               )}
-
-              {!walletAddress && (
-                <div className={styles.walletNotConnectedMessage}>
-                  <p className={styles.connectPrompt}>Please connect your wallet to participate and view lottery data</p>
-                </div>
+            </p>
+            <p className={styles.heroTextSecondary}>
+              {t(
+                "seo.heroTextSecondary",
+                "Главная цель — честный шанс выиграть в игре где все права равны. Риск потери средств — часть игры, но именно он делает победу по-настоящему ценной."
               )}
+            </p>
+          </section>
 
-              <div className={styles.actionRow}>
-                <button 
-                  onClick={handleParticipate} 
-                  className={`${styles.participateButton} ${loading ? styles.disabled : ''}`}
-                  disabled={loading}
-                >
-                  🎫 {loading ? t("processing", "Обработка...") : t("participate", "Участвовать — 30 POL")}
-                </button>
+          <div className={styles.contentGrid}>
+            <div className={styles.leftColumn}>
+              <section className={styles.jackpotSection}>
+                <div className={styles.jackpotHeaderRow}>
+                  <div>
+                    <div className={styles.jackpotTitle}>
+                      <span className={styles.jackpotIcon}>💰</span>
+                      {t("currentJackpot", "Текущий джекпот")}
+                    </div>
+                    <div className={styles.roundLabel}>Round: 1</div>
+                  </div>
+                  <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
+                </div>
 
-                <LuckyButton />
+                {poolAmount !== null ? (
+                  <>
+                    <PoolProgressBar current={poolAmount} goal={poolTarget} />
+
+                    <div className={styles.description}>
+                      <div className={styles.boldLine}>{t("collectingTo", "Собираем пул до")} {poolTarget.toLocaleString()} POL!</div>
+                      <div className={styles.mutedLine}>{t("eachTicketIncreases", "Каждый билет увеличивает джекпот.")}</div>
+                    </div>
+                  </>
+                ) : (
+                  <div className={styles.placeholderContainer}>
+                    <div className={styles.placeholderText}>Please connect wallet to view lottery data</div>
+                  </div>
+                )}
+
+                {!walletAddress && (
+                  <div className={styles.walletNotConnectedMessage}>
+                    <p className={styles.connectPrompt}>Please connect your wallet to participate and view lottery data</p>
+                  </div>
+                )}
+
+                <div className={styles.actionRow}>
+                  <button 
+                    onClick={handleParticipate} 
+                    className={`${styles.participateButton} ${loading ? styles.disabled : ''}`}
+                    disabled={loading}
+                  >
+                    🎫 {loading ? t("processing", "Обработка...") : t("participate", "Участвовать — 30 POL")}
+                  </button>
+
+                  <LuckyButton />
+                </div>
+
+                <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {!walletAddress ? '*' : myTickets}</div>
+              </section>
+
+              <HowItWorks onReadMore={openAboutPage} />
+            </div>
+
+            <div className={styles.rightColumn}>
+              <Winners winners={Array.isArray(winners) ? winners : []} />
+
+              <div className={styles.sideCard}>
+                <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
+                {feed.length > 0 ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>{t("liveFeedWaiting", "No purchase activity yet — live updates will appear here.")}</div>}
               </div>
-
-              <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {!walletAddress ? '*' : myTickets}</div>
-            </section>
-
-            <HowItWorks onReadMore={openAboutPage} />
-          </div>
-
-          <div className={styles.rightColumn}>
-            <Winners winners={Array.isArray(winners) ? winners : []} />
-
-            <div className={styles.sideCard}>
-              <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
-              {feed.length > 0 ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>{t("liveFeedWaiting", "No purchase activity yet — live updates will appear here.")}</div>}
             </div>
           </div>
         </main>
