@@ -35,5 +35,111 @@
       "title": "¡Victoria!",
       "text": "El contrato inteligente con Chainlink VRF elige un ganador aleatorio. El premio se envía automáticamente a la cartera."
     }
-  ]
+  ],
+  "readMoreProject": "Leer más sobre el proyecto",
+  "readMoreProjectHint": "Abre la descripción detallada, la transparencia y la arquitectura técnica",
+  "aboutPage": {
+    "back": "Volver a la lotería",
+    "title": "Seren Lottery — descripción completa del proyecto",
+    "intro": [
+      "Seren Lottery fue creada para cambiar para siempre la sensación de las loterías: el ganador lo elige la blockchain, no las personas.",
+      "Cada sorteo es transparente, verificable y queda registrado para siempre en la cadena."
+    ],
+    "stepsTitle": "Cómo funciona: 3 pasos simples",
+    "threeSteps": [
+      {
+        "title": "🎟️ Paso 1: Compra un boleto",
+        "text": "Un boleto cuesta 30 POL. Sin registro ni KYC: conecta tu wallet y participa.",
+        "points": [
+          "27 POL (90%) van al premio.",
+          "3 POL (10%) son comisión técnica para VRF y gas."
+        ]
+      },
+      {
+        "title": "⏳ Paso 2: Espera el sorteo",
+        "text": "La ronda continúa hasta alcanzar el objetivo del jackpot en la página principal.",
+        "points": [
+          "El equipo inicia el sorteo cuando se llena el pool.",
+          "Cada inicio es una transacción pública visible en Polygonscan."
+        ]
+      },
+      {
+        "title": "🏆 Paso 3: Selección del ganador",
+        "text": "El contrato solicita aleatoriedad a Chainlink VRF y elige al ganador matemáticamente.",
+        "points": [
+          "El resultado no puede predecirse ni manipularse.",
+          "El pago del premio es inmediato en cadena."
+        ]
+      }
+    ],
+    "fairnessTitle": "Por qué es justo",
+    "fairness": [
+      {
+        "title": "🔮 Aleatoriedad externa",
+        "text": "Chainlink VRF es independiente; el propietario no puede elegir al ganador."
+      },
+      {
+        "title": "👁️ Todas las acciones son visibles",
+        "text": "Puedes ver quién lanzó el sorteo, cuándo, cuántos boletos hubo y quién ganó."
+      },
+      {
+        "title": "💰 La economía desincentiva trampas",
+        "text": "Un pool mayor impulsa el crecimiento y las comisiones sostenibles del proyecto."
+      }
+    ],
+    "moneyTitle": "¿A dónde va el dinero?",
+    "money": {
+      "ticket": "Tú pagas",
+      "prize": "Para el ganador",
+      "fee": "Desarrollo + gas"
+    },
+    "technicalTitle": "Especificación técnica",
+    "technical": [
+      {
+        "label": "Red",
+        "value": "Polygon Mainnet"
+      },
+      {
+        "label": "Contrato",
+        "value": "0xf90169ad413429af4ae0a3b8962648d4a3289011"
+      },
+      {
+        "label": "Precio del boleto",
+        "value": "30 POL"
+      },
+      {
+        "label": "Comisión",
+        "value": "10%"
+      },
+      {
+        "label": "Solidity",
+        "value": "0.8.24"
+      },
+      {
+        "label": "Coordinador VRF",
+        "value": "0xAE975071Be8F8eE67addBC1A82488F4C83544077"
+      }
+    ],
+    "verificationTitle": "Cómo verificar por tu cuenta",
+    "verify": [
+      "Abre Polygonscan con la dirección del contrato.",
+      "Revisa en Read Contract: round, ticketsCount, prizePool y open.",
+      "Abre Events y revisa el historial de sorteos."
+    ],
+    "faqTitle": "Preguntas frecuentes",
+    "faq": [
+      {
+        "q": "¿Y si el propietario no inicia el sorteo?",
+        "a": "Los fondos quedan en el contrato, pero la economía del proyecto incentiva sorteos regulares."
+      },
+      {
+        "q": "¿Puede el proyecto cambiar las reglas?",
+        "a": "Algunos límites se pueden ajustar, pero el precio del boleto y la comisión están fijos en el código."
+      },
+      {
+        "q": "¿Y si el sorteo empieza justo después de mi compra?",
+        "a": "Participas de inmediato; las probabilidades son iguales para todos los boletos de la ronda."
+      }
+    ]
+  }
 }

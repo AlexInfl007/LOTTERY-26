@@ -15,5 +15,111 @@
   "ticketsBought": "gekaufte Tickets",
   "collectingTo": "Sammelt Pool bis",
   "eachTicketIncreases": "Jedes Ticket erhöht den Jackpot.",
-  "myTickets": "Meine Tickets"
+  "myTickets": "Meine Tickets",
+  "readMoreProject": "Mehr über das Projekt lesen",
+  "readMoreProjectHint": "Detaillierte Beschreibung, Transparenz und technische Architektur öffnen",
+  "aboutPage": {
+    "back": "Zurück zur Lotterie",
+    "title": "Seren Lottery — vollständige Projektbeschreibung",
+    "intro": [
+      "Seren Lottery wurde entwickelt, um Lotterien dauerhaft zu verändern: Der Gewinner wird von der Blockchain gewählt, nicht von Menschen.",
+      "Jede Ziehung ist transparent, überprüfbar und dauerhaft on-chain gespeichert."
+    ],
+    "stepsTitle": "So funktioniert es: 3 einfache Schritte",
+    "threeSteps": [
+      {
+        "title": "🎟️ Schritt 1: Ticket kaufen",
+        "text": "Ein Ticket kostet 30 POL. Keine Registrierung oder KYC nötig — Wallet verbinden und teilnehmen.",
+        "points": [
+          "27 POL (90 %) gehen in den Preispool.",
+          "3 POL (10 %) sind technische Gebühr für VRF und Gas."
+        ]
+      },
+      {
+        "title": "⏳ Schritt 2: Auf die Ziehung warten",
+        "text": "Die Runde läuft, bis das Jackpot-Ziel auf der Startseite erreicht ist.",
+        "points": [
+          "Das Team startet die Ziehung, sobald der Pool gefüllt ist.",
+          "Jeder Start ist eine öffentliche Transaktion auf Polygonscan."
+        ]
+      },
+      {
+        "title": "🏆 Schritt 3: Gewinnerauswahl",
+        "text": "Der Vertrag fordert Zufall von Chainlink VRF an und bestimmt den Gewinner mathematisch.",
+        "points": [
+          "Das Ergebnis ist weder vorhersagbar noch manipulierbar.",
+          "Die Auszahlung erfolgt sofort on-chain."
+        ]
+      }
+    ],
+    "fairnessTitle": "Warum das fair ist",
+    "fairness": [
+      {
+        "title": "🔮 Zufall außerhalb der Kontrolle",
+        "text": "Chainlink VRF ist unabhängig; der Eigentümer kann keinen Gewinner festlegen."
+      },
+      {
+        "title": "👁️ Alle Aktionen sind sichtbar",
+        "text": "Du siehst, wer die Ziehung gestartet hat, wann, wie viele Tickets es gab und wer gewonnen hat."
+      },
+      {
+        "title": "💰 Ökonomie verhindert Betrug",
+        "text": "Ein größerer Pool stärkt Wachstum und nachhaltige Projektgebühren."
+      }
+    ],
+    "moneyTitle": "Wohin geht das Geld?",
+    "money": {
+      "ticket": "Du zahlst",
+      "prize": "An den Gewinner",
+      "fee": "Entwicklung + Gas"
+    },
+    "technicalTitle": "Technische Spezifikation",
+    "technical": [
+      {
+        "label": "Netzwerk",
+        "value": "Polygon Mainnet"
+      },
+      {
+        "label": "Vertrag",
+        "value": "0xf90169ad413429af4ae0a3b8962648d4a3289011"
+      },
+      {
+        "label": "Ticketpreis",
+        "value": "30 POL"
+      },
+      {
+        "label": "Gebühr",
+        "value": "10%"
+      },
+      {
+        "label": "Solidity",
+        "value": "0.8.24"
+      },
+      {
+        "label": "VRF-Koordinator",
+        "value": "0xAE975071Be8F8eE67addBC1A82488F4C83544077"
+      }
+    ],
+    "verificationTitle": "So prüfst du es selbst",
+    "verify": [
+      "Öffne Polygonscan mit der Vertragsadresse.",
+      "Prüfe in Read Contract: round, ticketsCount, prizePool, open.",
+      "Öffne Events und prüfe die Ziehungs-Historie."
+    ],
+    "faqTitle": "Häufige Fragen",
+    "faq": [
+      {
+        "q": "Was, wenn der Eigentümer die Ziehung nicht startet?",
+        "a": "Die Mittel bleiben im Vertrag, aber die Ökonomie motiviert regelmäßige Ziehungen."
+      },
+      {
+        "q": "Kann das Projekt Regeln ändern?",
+        "a": "Einige Limits sind anpassbar, aber Ticketpreis und Gebühr sind im Code fixiert."
+      },
+      {
+        "q": "Was, wenn die Ziehung direkt nach meinem Kauf startet?",
+        "a": "Du bist sofort dabei; die Chancen sind für alle Tickets der Runde gleich."
+      }
+    ]
+  }
 }

@@ -6,6 +6,7 @@ import WalletConnect from "./components/WalletConnect";
 import LiveFeed from "./components/LiveFeed";
 import Winners from "./components/Winners";
 import HowItWorks from "./components/HowItWorks";
+import ProjectAboutPage from "./components/ProjectAboutPage";
 import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
@@ -14,6 +15,7 @@ import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentW
 
 export default function App() {
   const { t } = useTranslation();
+  const [isAboutPage, setIsAboutPage] = useState(() => window.location.hash === "#/about");
 
   const [poolAmount, setPoolAmount] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
   const poolTarget = 1000000;
@@ -27,6 +29,20 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
+
+  useEffect(() => {
+    const onHashChange = () => setIsAboutPage(window.location.hash === "#/about");
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const openAboutPage = () => {
+    window.location.hash = "/about";
+  };
+
+  const openHomePage = () => {
+    window.location.hash = "";
+  };
 
   // Initialize data from smart contract when wallet is connected
   useEffect(() => {
@@ -255,68 +271,72 @@ export default function App() {
         </div>
       </header>
 
-      <main className={styles.main}>
-        <div className={styles.leftColumn}>
-          <section className={styles.jackpotSection}>
-            <div className={styles.jackpotHeaderRow}>
-              <div>
-                <div className={styles.jackpotTitle}>
-                  <span className={styles.jackpotIcon}>💰</span>
-                  {t("currentJackpot", "Текущий джекпот")}
+      {isAboutPage ? (
+        <ProjectAboutPage onBack={openHomePage} />
+      ) : (
+        <main className={styles.main}>
+          <div className={styles.leftColumn}>
+            <section className={styles.jackpotSection}>
+              <div className={styles.jackpotHeaderRow}>
+                <div>
+                  <div className={styles.jackpotTitle}>
+                    <span className={styles.jackpotIcon}>💰</span>
+                    {t("currentJackpot", "Текущий джекпот")}
+                  </div>
+                  <div className={styles.roundLabel}>Round: 1</div>
                 </div>
-                <div className={styles.roundLabel}>Round: 1</div>
+                <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
               </div>
-              <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
-            </div>
 
-            {poolAmount !== null ? (
-              <>
-                <PoolProgressBar current={poolAmount} goal={poolTarget} />
+              {poolAmount !== null ? (
+                <>
+                  <PoolProgressBar current={poolAmount} goal={poolTarget} />
 
-                <div className={styles.description}>
-                  <div className={styles.boldLine}>{t("collectingTo", "Собираем пул до")} {poolTarget.toLocaleString()} POL!</div>
-                  <div className={styles.mutedLine}>{t("eachTicketIncreases", "Каждый билет увеличивает джекпот.")}</div>
+                  <div className={styles.description}>
+                    <div className={styles.boldLine}>{t("collectingTo", "Собираем пул до")} {poolTarget.toLocaleString()} POL!</div>
+                    <div className={styles.mutedLine}>{t("eachTicketIncreases", "Каждый билет увеличивает джекпот.")}</div>
+                  </div>
+                </>
+              ) : (
+                <div className={styles.placeholderContainer}>
+                  <div className={styles.placeholderText}>Please connect wallet to view lottery data</div>
                 </div>
-              </>
-            ) : (
-              <div className={styles.placeholderContainer}>
-                <div className={styles.placeholderText}>Please connect wallet to view lottery data</div>
+              )}
+
+              {!walletAddress && (
+                <div className={styles.walletNotConnectedMessage}>
+                  <p className={styles.connectPrompt}>Please connect your wallet to participate and view lottery data</p>
+                </div>
+              )}
+
+              <div className={styles.actionRow}>
+                <button 
+                  onClick={handleParticipate} 
+                  className={`${styles.participateButton} ${loading ? styles.disabled : ''}`}
+                  disabled={loading}
+                >
+                  🎫 {loading ? t("processing", "Обработка...") : t("participate", "Участвовать — 30 POL")}
+                </button>
+
+                <LuckyButton />
               </div>
-            )}
 
-            {!walletAddress && (
-              <div className={styles.walletNotConnectedMessage}>
-                <p className={styles.connectPrompt}>Please connect your wallet to participate and view lottery data</p>
-              </div>
-            )}
+              <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {!walletAddress ? '*' : myTickets}</div>
+            </section>
 
-            <div className={styles.actionRow}>
-              <button 
-                onClick={handleParticipate} 
-                className={`${styles.participateButton} ${loading ? styles.disabled : ''}`}
-                disabled={loading}
-              >
-                🎫 {loading ? t("processing", "Обработка...") : t("participate", "Участвовать — 30 POL")}
-              </button>
-
-              <LuckyButton />
-            </div>
-
-            <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {!walletAddress ? '*' : myTickets}</div>
-          </section>
-
-          <HowItWorks />
-        </div>
-
-        <div className={styles.rightColumn}>
-          <Winners winners={Array.isArray(winners) ? winners : []} />
-
-          <div className={styles.sideCard}>
-            <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
-            {feed.length > 0 ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>{t("liveFeedWaiting", "No purchase activity yet — live updates will appear here.")}</div>}
+            <HowItWorks onReadMore={openAboutPage} />
           </div>
-        </div>
-      </main>
+
+          <div className={styles.rightColumn}>
+            <Winners winners={Array.isArray(winners) ? winners : []} />
+
+            <div className={styles.sideCard}>
+              <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
+              {feed.length > 0 ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>{t("liveFeedWaiting", "No purchase activity yet — live updates will appear here.")}</div>}
+            </div>
+          </div>
+        </main>
+      )}
 
       <footer className={styles.footer}>
         <div className={styles.footerTop}>

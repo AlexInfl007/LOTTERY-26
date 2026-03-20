@@ -15,5 +15,111 @@
   "ticketsBought": "购票数",
   "collectingTo": "收集池到",
   "eachTicketIncreases": "每张彩票都会增加奖池。",
-  "myTickets": "我的彩票"
+  "myTickets": "我的彩票",
+  "readMoreProject": "了解更多项目详情",
+  "readMoreProjectHint": "查看详细说明、透明机制与技术架构",
+  "aboutPage": {
+    "back": "返回彩票页",
+    "title": "Seren Lottery — 项目完整说明",
+    "intro": [
+      "Seren Lottery 的目标是彻底改变彩票体验：中奖者由区块链选择，而不是人为决定。",
+      "每次开奖都透明、可验证，并永久记录在链上。"
+    ],
+    "stepsTitle": "如何运作：3 个简单步骤",
+    "threeSteps": [
+      {
+        "title": "🎟️ 第一步：购买门票",
+        "text": "每张门票 30 POL。无需注册或 KYC，连接钱包即可参与。",
+        "points": [
+          "27 POL（90%）进入奖金池。",
+          "3 POL（10%）作为 VRF 与 Gas 技术费用。"
+        ]
+      },
+      {
+        "title": "⏳ 第二步：等待开奖",
+        "text": "本轮会持续到主页显示的奖池目标被填满。",
+        "points": [
+          "奖池满后由团队发起开奖。",
+          "每次发起都是公开交易，可在 Polygonscan 查看。"
+        ]
+      },
+      {
+        "title": "🏆 第三步：选出赢家",
+        "text": "合约向 Chainlink VRF 请求随机数，并以数学方式选出中奖门票。",
+        "points": [
+          "结果无法预测或篡改。",
+          "奖金会立即在链上发放。"
+        ]
+      }
+    ],
+    "fairnessTitle": "为什么它是公平的",
+    "fairness": [
+      {
+        "title": "🔮 随机性不受人为控制",
+        "text": "Chainlink VRF 独立运行，合约拥有者无法指定中奖者。"
+      },
+      {
+        "title": "👁️ 所有操作可见",
+        "text": "你可以看到谁在何时发起开奖、门票数量以及最终赢家。"
+      },
+      {
+        "title": "💰 经济机制抑制作弊",
+        "text": "更大的奖池带来更高参与度与可持续手续费收益。"
+      }
+    ],
+    "moneyTitle": "资金去向",
+    "money": {
+      "ticket": "你支付",
+      "prize": "给中奖者",
+      "fee": "开发 + Gas"
+    },
+    "technicalTitle": "技术规格",
+    "technical": [
+      {
+        "label": "网络",
+        "value": "Polygon Mainnet"
+      },
+      {
+        "label": "合约地址",
+        "value": "0xf90169ad413429af4ae0a3b8962648d4a3289011"
+      },
+      {
+        "label": "门票价格",
+        "value": "30 POL"
+      },
+      {
+        "label": "手续费",
+        "value": "10%"
+      },
+      {
+        "label": "Solidity",
+        "value": "0.8.24"
+      },
+      {
+        "label": "VRF 协调器",
+        "value": "0xAE975071Be8F8eE67addBC1A82488F4C83544077"
+      }
+    ],
+    "verificationTitle": "如何自行验证",
+    "verify": [
+      "在 Polygonscan 打开合约地址。",
+      "在 Read Contract 查看：round、ticketsCount、prizePool、open。",
+      "在 Events 中查看开奖历史。"
+    ],
+    "faqTitle": "常见问题",
+    "faq": [
+      {
+        "q": "如果项目方不发起开奖怎么办？",
+        "a": "资金会留在合约中，但项目经济模型会驱动定期开奖。"
+      },
+      {
+        "q": "项目方可以改规则吗？",
+        "a": "部分上限可配置，但门票价格和手续费比例写死在代码里。"
+      },
+      {
+        "q": "如果我刚买完就开奖呢？",
+        "a": "你会立即参与本轮；本轮所有门票概率一致。"
+      }
+    ]
+  }
 }

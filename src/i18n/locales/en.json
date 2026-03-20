@@ -75,5 +75,111 @@
   "recentWinners": "Recent winners",
   "winnersSubtitle": "Winner history will appear here",
   "winnerPending": "Waiting for the first winner",
-  "liveFeedWaiting": "No purchase activity yet — live updates will appear here."
+  "liveFeedWaiting": "No purchase activity yet — live updates will appear here.",
+  "readMoreProject": "Read more about project",
+  "readMoreProjectHint": "Open detailed description, transparency and technical architecture",
+  "aboutPage": {
+    "back": "Back to lottery",
+    "title": "Seren Lottery — complete project description",
+    "intro": [
+      "Seren Lottery is built to change lotteries forever: winners are picked by blockchain, not by people.",
+      "Every draw is transparent, verifiable, and permanently recorded on-chain."
+    ],
+    "stepsTitle": "How it works: 3 simple steps",
+    "threeSteps": [
+      {
+        "title": "🎟️ Step 1: Buy a ticket",
+        "text": "One ticket costs 30 POL. No registration or KYC needed — connect wallet and join.",
+        "points": [
+          "27 POL (90%) goes to prize pool.",
+          "3 POL (10%) is technical fee for VRF and gas."
+        ]
+      },
+      {
+        "title": "⏳ Step 2: Wait for draw",
+        "text": "Round runs until jackpot target from homepage is reached.",
+        "points": [
+          "The team starts draw once pool is filled.",
+          "Each start is a public transaction visible on Polygonscan."
+        ]
+      },
+      {
+        "title": "🏆 Step 3: Winner selection",
+        "text": "Contract requests randomness from Chainlink VRF and picks winner mathematically.",
+        "points": [
+          "Result cannot be predicted or manipulated.",
+          "Prize transfer is immediate on-chain."
+        ]
+      }
+    ],
+    "fairnessTitle": "Why this is fair",
+    "fairness": [
+      {
+        "title": "🔮 Randomness is external",
+        "text": "Chainlink VRF is independent; owner cannot choose winner."
+      },
+      {
+        "title": "👁️ Every action is visible",
+        "text": "You can inspect who launched draw, when, ticket amount, and winner."
+      },
+      {
+        "title": "💰 Economics discourage cheating",
+        "text": "A larger pool means stronger growth and fees for project sustainability."
+      }
+    ],
+    "moneyTitle": "Where does the money go?",
+    "money": {
+      "ticket": "You pay",
+      "prize": "To winner",
+      "fee": "Development + gas"
+    },
+    "technicalTitle": "Technical specification",
+    "technical": [
+      {
+        "label": "Network",
+        "value": "Polygon Mainnet"
+      },
+      {
+        "label": "Contract",
+        "value": "0xf90169ad413429af4ae0a3b8962648d4a3289011"
+      },
+      {
+        "label": "Ticket price",
+        "value": "30 POL"
+      },
+      {
+        "label": "Commission",
+        "value": "10%"
+      },
+      {
+        "label": "Solidity",
+        "value": "0.8.24"
+      },
+      {
+        "label": "VRF Coordinator",
+        "value": "0xAE975071Be8F8eE67addBC1A82488F4C83544077"
+      }
+    ],
+    "verificationTitle": "How to verify on your own",
+    "verify": [
+      "Open Polygonscan with the contract address.",
+      "Check Read Contract values: round, ticketsCount, prizePool, open.",
+      "Open Events and inspect draw history."
+    ],
+    "faqTitle": "Frequently asked questions",
+    "faq": [
+      {
+        "q": "What if owner does not start draw?",
+        "a": "Funds stay in contract, but project economics motivate regular draws."
+      },
+      {
+        "q": "Can project change rules?",
+        "a": "Some limits are configurable, but ticket price and commission are fixed in code."
+      },
+      {
+        "q": "What if draw starts right after I buy?",
+        "a": "You are in immediately; odds are equal for all tickets of this round."
+      }
+    ]
+  }
 }
