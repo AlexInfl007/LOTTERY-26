@@ -11,10 +11,11 @@ import LanguageSelector from "./components/LanguageSelector";
 import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
+import { updateSeo } from "./seo";
 import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider } from "./utils/ethersUtils";
 
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [isAboutPage, setIsAboutPage] = useState(() => window.location.hash === "#/about");
 
   const [poolAmount, setPoolAmount] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
@@ -43,6 +44,23 @@ export default function App() {
   const openHomePage = () => {
     window.location.hash = "";
   };
+
+  useEffect(() => {
+    const isAbout = isAboutPage;
+    const pageTitle = isAbout
+      ? t("seo.aboutTitle", "Seren Lottery Chain — How the on-chain lottery works")
+      : t("seo.homeTitle", "Seren Lottery Chain — On-chain Polygon lottery with verifiable randomness");
+    const pageDescription = isAbout
+      ? t("seo.aboutDescription", "Learn how Seren Lottery Chain works, how winners are selected, and how the Polygon smart contract can be verified publicly.")
+      : t("seo.homeDescription", "Seren Lottery Chain is a transparent on-chain Polygon lottery with Chainlink VRF, public smart-contract verification, and a live jackpot interface.");
+
+    document.documentElement.lang = i18n.language || "en";
+    updateSeo({
+      title: pageTitle,
+      description: pageDescription,
+      path: "/",
+    });
+  }, [isAboutPage, t, i18n.language]);
 
   // Initialize data from smart contract when wallet is connected
   useEffect(() => {
@@ -276,6 +294,23 @@ export default function App() {
       ) : (
         <main className={styles.main}>
           <div className={styles.leftColumn}>
+            <section className={styles.heroIntro} aria-label="Project overview">
+              <p className={styles.heroEyebrow}>Polygon • Chainlink VRF • On-chain transparency</p>
+              <h1 className={styles.heroTitle}>Seren Lottery Chain</h1>
+              <p className={styles.heroText}>
+                {t(
+                  "seo.heroText",
+                  "Seren Lottery Chain is a transparent crypto lottery on Polygon where users can connect a wallet, track the jackpot, inspect the smart contract, and verify that winner selection is powered by Chainlink VRF."
+                )}
+              </p>
+              <p className={styles.heroTextSecondary}>
+                {t(
+                  "seo.heroTextSecondary",
+                  "The site is designed to make the prize pool, participation flow, and fairness model understandable both for users and for search engines indexing the project."
+                )}
+              </p>
+            </section>
+
             <section className={styles.jackpotSection}>
               <div className={styles.jackpotHeaderRow}>
                 <div>
