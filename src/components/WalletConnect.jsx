@@ -70,6 +70,16 @@ export default function WalletConnect({ onConnect }) {
 
         const currentAddress = await getCurrentWalletAddress();
         if (currentAddress) {
+          const restoredSession = await restoreWalletSession();
+          if (restoredSession?.address) {
+            setAddress(restoredSession.address);
+            setConnected(true);
+            updateProvider(restoredSession.provider);
+            updateContractInstance(restoredSession.provider);
+            onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
+            return;
+          }
+
           setAddress(currentAddress);
           setConnected(true);
           return;
@@ -87,7 +97,7 @@ export default function WalletConnect({ onConnect }) {
 
     if (!window.ethereum) return undefined;
 
-    const onAccountsChanged = (accounts) => {
+    const onAccountsChanged = async (accounts) => {
       if (!accounts || accounts.length === 0) {
         setConnected(false);
         setAddress(null);
@@ -96,6 +106,16 @@ export default function WalletConnect({ onConnect }) {
 
       setConnected(true);
       setAddress(accounts[0]);
+      try {
+        const restoredSession = await restoreWalletSession();
+        if (!restoredSession?.address) return;
+
+        updateProvider(restoredSession.provider);
+        updateContractInstance(restoredSession.provider);
+        onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
+      } catch {
+        // Keep local wallet badge updated even if full session restore fails.
+      }
     };
 
     const onChainChanged = () => {

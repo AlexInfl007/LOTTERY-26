@@ -30,6 +30,7 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
+  const lastFeedSeedTsRef = useRef(0);
 
   const formatFeedFromPurchases = (purchases = []) => {
     return purchases.map((purchase) => {
@@ -37,6 +38,27 @@ export default function App() {
       const shortAddress = formatShortAddress(purchase.from);
       return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
     });
+  };
+
+  const seedFeedFromChain = async (ticketCountHint = null) => {
+    const recentPurchases = await getRecentTicketPurchases(15, 30000, ticketCountHint);
+    const formattedRecentFeed = formatFeedFromPurchases(recentPurchases);
+
+    if (formattedRecentFeed.length > 0) {
+      setFeed(formattedRecentFeed);
+      lastFeedSeedTsRef.current = Date.now();
+      return true;
+    }
+
+    if (typeof ticketCountHint === 'number' && ticketCountHint > 0) {
+      setFeed([
+        `${t('events.ticketPurchased', 'New ticket purchased')} #${ticketCountHint}`
+      ]);
+      lastFeedSeedTsRef.current = Date.now();
+      return true;
+    }
+
+    return false;
   };
   const formatShortAddress = (address) => {
     if (!address || address.length < 10) return address || "";
@@ -89,6 +111,7 @@ export default function App() {
           setMyTickets(0);
           setFeed([]);
           lastObservedTicketsRef.current = null;
+          lastFeedSeedTsRef.current = 0;
           setLoading(false);
         }
         return;
@@ -136,21 +159,10 @@ export default function App() {
         setTicketsBought(initialTicketsCount);
         lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
 
-        let formattedRecentFeed = [];
         try {
-          const recentPurchases = await getRecentTicketPurchases(15, 120000, initialTicketsCount);
-          formattedRecentFeed = formatFeedFromPurchases(recentPurchases);
+          await seedFeedFromChain(initialTicketsCount);
         } catch (feedError) {
           console.warn("Unable to preload ticket feed:", feedError);
-        }
-
-        if (formattedRecentFeed.length > 0) {
-          setFeed(formattedRecentFeed);
-        } else if (typeof initialTicketsCount === 'number' && initialTicketsCount > 0) {
-          setFeed([
-            `${t('events.ticketPurchased', 'New ticket purchased')} #${initialTicketsCount}`
-          ]);
-        } else {
           setFeed([]);
         }
         
@@ -209,11 +221,8 @@ export default function App() {
           const previousCount = lastObservedTicketsRef.current;
           if (typeof previousCount === 'number' && updatedTicketsCount > previousCount) {
             try {
-              const recentPurchases = await getRecentTicketPurchases(15, 120000, updatedTicketsCount);
-              const formattedRecentFeed = formatFeedFromPurchases(recentPurchases);
-              if (formattedRecentFeed.length > 0) {
-                setFeed(formattedRecentFeed);
-              } else {
+              const wasSeeded = await seedFeedFromChain(updatedTicketsCount);
+              if (!wasSeeded) {
                 const timestamp = new Date().toLocaleTimeString();
                 setFeed((previousFeed) => [
                   `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
@@ -226,6 +235,16 @@ export default function App() {
                 `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
                 ...previousFeed
               ].slice(0, 15));
+            }
+          }
+
+          const FEED_RESEED_INTERVAL_MS = 120000;
+          const shouldReseed = Date.now() - lastFeedSeedTsRef.current >= FEED_RESEED_INTERVAL_MS;
+          if (shouldReseed) {
+            try {
+              await seedFeedFromChain(updatedTicketsCount);
+            } catch {
+              // Keep existing feed if reseed fails.
             }
           }
 
