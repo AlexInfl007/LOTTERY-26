@@ -64,6 +64,8 @@ export async function watchTicketEvents(onTicketEvent) {
 
   const currentContract = await getCurrentContract();
   if (!currentContract) return () => {};
+  const provider = await getCurrentProvider();
+  const seenTx = new Set();
 
   const handler = async (buyer) => {
     try {
@@ -81,7 +83,43 @@ export async function watchTicketEvents(onTicketEvent) {
   };
 
   currentContract.on('TicketBought', handler);
-  return () => currentContract.off('TicketBought', handler);
+
+  const fallbackBlockHandler = async (blockNumber) => {
+    if (!provider) return;
+
+    try {
+      const block = await getBlockWithTransactions(provider, blockNumber);
+      if (!block?.transactions?.length) return;
+
+      for (const tx of block.transactions) {
+        const txData = tx?.data || tx?.input || '';
+        const isTargetContract = tx?.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
+        const isTicketLikeCall = typeof txData === 'string' && PURCHASE_METHOD_SELECTORS.some((selector) => txData.startsWith(selector));
+        if (!isTargetContract || !isTicketLikeCall) continue;
+        if (seenTx.has(tx.hash)) continue;
+
+        seenTx.add(tx.hash);
+        const shortAddress = tx?.from ? `${tx.from.slice(0, 6)}...${tx.from.slice(-4)}` : 'Unknown';
+        onTicketEvent({
+          message: `New ticket purchased • ${shortAddress} • ${new Date().toLocaleTimeString()}`,
+          ticketsCount: null
+        });
+      }
+    } catch {
+      // Ignore fallback scanning errors.
+    }
+  };
+
+  if (provider) {
+    provider.on('block', fallbackBlockHandler);
+  }
+
+  return () => {
+    currentContract.off('TicketBought', handler);
+    if (provider) {
+      provider.off('block', fallbackBlockHandler);
+    }
+  };
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
@@ -248,8 +286,8 @@ async function fetchPurchasesFromPolygonscan(limit) {
 }
 
 function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
-  const MIN_SCAN_BLOCKS = 4000;
-  const MAX_SCAN_BLOCKS = 30000;
+  const MIN_SCAN_BLOCKS = 25000;
+  const MAX_SCAN_BLOCKS = 180000;
 
   const baseScan = Number.isFinite(defaultBlocksToScan) ? Number(defaultBlocksToScan) : MIN_SCAN_BLOCKS;
   const estimatedByTickets = Number.isFinite(totalTickets) && totalTickets > 0
