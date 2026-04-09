@@ -106,21 +106,20 @@ export async function watchTicketEvents(onTicketEvent) {
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
-  try {
-    const provider = await getCurrentProvider();
-    if (!provider) return [];
+  const fromExplorer = await fetchPurchasesFromPolygonscan(limit);
+  if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
 
+  const provider = await getCurrentProvider();
+  if (!provider) return [];
+
+  try {
     const byBlockScan = await scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets);
     if (byBlockScan.length > 0) return byBlockScan.slice(0, limit);
-
-    const fromExplorer = await fetchPurchasesFromPolygonscan(limit);
-    if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
-
-    return [];
   } catch (error) {
-    console.warn('Failed to scan recent ticket purchases:', error);
-    return [];
+    console.warn('Failed to scan recent ticket purchases via RPC:', error);
   }
+
+  return [];
 }
 
 async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets) {
@@ -132,7 +131,12 @@ async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTicke
   for (let blockNumber = latestBlockNumber; blockNumber >= fromBlock; blockNumber -= 1) {
     if (purchases.length >= limit) break;
 
-    const block = await getBlockWithTransactions(provider, blockNumber);
+    let block = null;
+    try {
+      block = await getBlockWithTransactions(provider, blockNumber);
+    } catch {
+      continue;
+    }
     if (!block || !block.transactions?.length) continue;
 
     for (const tx of block.transactions) {
@@ -185,8 +189,11 @@ async function fetchPurchasesFromPolygonscan(limit) {
 
       const to = String(tx.to || '').toLowerCase();
       const input = String(tx.input || '').toLowerCase();
+      const functionName = String(tx.functionName || '').toLowerCase();
       if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
-      if (!PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()))) continue;
+      const isKnownSelector = PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()));
+      const isKnownName = functionName.includes('buyticket') || functionName.includes('enterraffle');
+      if (!isKnownSelector && !isKnownName) continue;
 
       purchases.push({
         hash: tx.hash,
@@ -203,8 +210,8 @@ async function fetchPurchasesFromPolygonscan(limit) {
 }
 
 function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
-  const MIN_SCAN_BLOCKS = 12000;
-  const MAX_SCAN_BLOCKS = 60000;
+  const MIN_SCAN_BLOCKS = 4000;
+  const MAX_SCAN_BLOCKS = 30000;
 
   const baseScan = Number.isFinite(defaultBlocksToScan) ? Number(defaultBlocksToScan) : MIN_SCAN_BLOCKS;
   const estimatedByTickets = Number.isFinite(totalTickets) && totalTickets > 0
