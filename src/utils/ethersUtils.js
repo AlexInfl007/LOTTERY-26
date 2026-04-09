@@ -1,7 +1,8 @@
 import { ethers } from 'ethers';
-import { getContractAsync, initializeContract, getContractWithSigner } from '../../utils/contractManager';
+import { getContractWithSigner } from '../../utils/contractManager';
 import { getSharedProvider, setSharedProvider } from './providerStore';
-import { CONTRACT_ADDRESS } from './contract';
+import { CONTRACT_ABI, CONTRACT_ADDRESS } from './contract';
+import { POLYGON_RPC_URLS } from '../config/rpcConfig';
 
 export const SUPPORTS_TICKET_EVENTS = false;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
@@ -11,6 +12,8 @@ const PURCHASE_METHOD_SELECTORS = [
 ];
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
 const TICKET_PRICE_WEI = ethers.parseEther('30');
+let readOnlyProvider = null;
+let readOnlyRpcIndex = 0;
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
@@ -21,17 +24,20 @@ export function updateContractInstance(newProvider) {
 }
 
 export async function getCurrentProvider() {
-  const provider = getSharedProvider();
-  if (!provider) return null;
-
-  try {
-    const network = await provider.getNetwork();
-    if (Number(network.chainId) !== 137) return null;
-    await provider.getBlockNumber();
-    return provider;
-  } catch {
-    return null;
+  const walletProvider = getSharedProvider();
+  if (walletProvider) {
+    try {
+      const network = await walletProvider.getNetwork();
+      if (Number(network.chainId) === 137) {
+        await walletProvider.getBlockNumber();
+        return walletProvider;
+      }
+    } catch {
+      // Fallback to read-only provider below.
+    }
   }
+
+  return getReadOnlyProvider();
 }
 
 export async function getCurrentContract() {
@@ -39,11 +45,41 @@ export async function getCurrentContract() {
   if (!provider) return null;
 
   try {
-    await initializeContract();
-    return await getContractAsync();
+    return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
   } catch {
     return null;
   }
+}
+
+async function getReadOnlyProvider() {
+  if (readOnlyProvider) {
+    try {
+      const network = await readOnlyProvider.getNetwork();
+      if (Number(network.chainId) === 137) {
+        await readOnlyProvider.getBlockNumber();
+        return readOnlyProvider;
+      }
+    } catch {
+      readOnlyProvider = null;
+    }
+  }
+
+  for (let attempt = 0; attempt < POLYGON_RPC_URLS.length; attempt += 1) {
+    const index = (readOnlyRpcIndex + attempt) % POLYGON_RPC_URLS.length;
+    const rpcUrl = POLYGON_RPC_URLS[index];
+    const candidate = new ethers.JsonRpcProvider(rpcUrl, 137);
+
+    try {
+      await candidate.getBlockNumber();
+      readOnlyProvider = candidate;
+      readOnlyRpcIndex = index;
+      return readOnlyProvider;
+    } catch {
+      // Try the next RPC endpoint.
+    }
+  }
+
+  return null;
 }
 
 export async function readPrizePool() {
