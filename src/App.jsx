@@ -128,12 +128,17 @@ export default function App() {
         setTicketsBought(initialTicketsCount);
         lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
 
-        const recentPurchases = await getRecentTicketPurchases(15, 5000);
-        const formattedRecentFeed = recentPurchases.map((purchase) => {
-          const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
-          const shortAddress = formatShortAddress(purchase.from);
-          return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
-        });
+        let formattedRecentFeed = [];
+        try {
+          const recentPurchases = await getRecentTicketPurchases(15, 5000);
+          formattedRecentFeed = recentPurchases.map((purchase) => {
+            const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
+            const shortAddress = formatShortAddress(purchase.from);
+            return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
+          });
+        } catch (feedError) {
+          console.warn("Unable to preload ticket feed:", feedError);
+        }
 
         if (formattedRecentFeed.length > 0) {
           setFeed(formattedRecentFeed);
