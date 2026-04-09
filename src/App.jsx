@@ -30,6 +30,36 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
+  const lastFeedSeedTsRef = useRef(0);
+
+  const formatFeedFromPurchases = (purchases = []) => {
+    return purchases.map((purchase) => {
+      const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
+      const shortAddress = formatShortAddress(purchase.from);
+      return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
+    });
+  };
+
+  const seedFeedFromChain = async (ticketCountHint = null) => {
+    const recentPurchases = await getRecentTicketPurchases(15, 30000, ticketCountHint);
+    const formattedRecentFeed = formatFeedFromPurchases(recentPurchases);
+
+    if (formattedRecentFeed.length > 0) {
+      setFeed(formattedRecentFeed);
+      lastFeedSeedTsRef.current = Date.now();
+      return true;
+    }
+
+    if (typeof ticketCountHint === 'number' && ticketCountHint > 0) {
+      setFeed([
+        `${t('events.ticketPurchased', 'New ticket purchased')} #${ticketCountHint}`
+      ]);
+      lastFeedSeedTsRef.current = Date.now();
+      return true;
+    }
+
+    return false;
+  };
   const formatShortAddress = (address) => {
     if (!address || address.length < 10) return address || "";
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -81,6 +111,7 @@ export default function App() {
           setMyTickets(0);
           setFeed([]);
           lastObservedTicketsRef.current = null;
+          lastFeedSeedTsRef.current = 0;
           setLoading(false);
         }
         return;
@@ -128,25 +159,10 @@ export default function App() {
         setTicketsBought(initialTicketsCount);
         lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
 
-        let formattedRecentFeed = [];
         try {
-          const recentPurchases = await getRecentTicketPurchases(15, 5000);
-          formattedRecentFeed = recentPurchases.map((purchase) => {
-            const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
-            const shortAddress = formatShortAddress(purchase.from);
-            return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
-          });
+          await seedFeedFromChain(initialTicketsCount);
         } catch (feedError) {
           console.warn("Unable to preload ticket feed:", feedError);
-        }
-
-        if (formattedRecentFeed.length > 0) {
-          setFeed(formattedRecentFeed);
-        } else if (typeof initialTicketsCount === 'number' && initialTicketsCount > 0) {
-          setFeed([
-            `${t('events.ticketPurchased', 'New ticket purchased')} #${initialTicketsCount}`
-          ]);
-        } else {
           setFeed([]);
         }
         
@@ -204,16 +220,32 @@ export default function App() {
 
           const previousCount = lastObservedTicketsRef.current;
           if (typeof previousCount === 'number' && updatedTicketsCount > previousCount) {
-            const newPurchases = updatedTicketsCount - previousCount;
-            const timestamp = new Date().toLocaleTimeString();
+            try {
+              const wasSeeded = await seedFeedFromChain(updatedTicketsCount);
+              if (!wasSeeded) {
+                const timestamp = new Date().toLocaleTimeString();
+                setFeed((previousFeed) => [
+                  `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
+                  ...previousFeed
+                ].slice(0, 15));
+              }
+            } catch {
+              const timestamp = new Date().toLocaleTimeString();
+              setFeed((previousFeed) => [
+                `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
+                ...previousFeed
+              ].slice(0, 15));
+            }
+          }
 
-            setFeed((previousFeed) => {
-              const newEvents = Array.from({ length: Math.min(newPurchases, 5) }, (_, index) => (
-                `${t('events.ticketPurchased', 'New ticket purchased')} #${previousCount + index + 1} • ${timestamp}`
-              ));
-
-              return [...newEvents, ...previousFeed].slice(0, 15);
-            });
+          const FEED_RESEED_INTERVAL_MS = 120000;
+          const shouldReseed = Date.now() - lastFeedSeedTsRef.current >= FEED_RESEED_INTERVAL_MS;
+          if (shouldReseed) {
+            try {
+              await seedFeedFromChain(updatedTicketsCount);
+            } catch {
+              // Keep existing feed if reseed fails.
+            }
           }
 
           lastObservedTicketsRef.current = updatedTicketsCount;
@@ -228,7 +260,7 @@ export default function App() {
       intervalId = setTimeout(async () => {
         await updatePool();
         scheduleUpdate(); // Schedule the next update
-      }, 10000); // Update every 10 seconds
+      }, 30000); // Update every 30 seconds
     };
     
     scheduleUpdate();

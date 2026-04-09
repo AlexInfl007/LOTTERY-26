@@ -6,6 +6,7 @@ import { CONTRACT_ADDRESS } from './contract';
 export const SUPPORTS_TICKET_EVENTS = false;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
 const ENTER_RAFFLE_SELECTOR = '0x' + ethers.id('enterRaffle()').slice(2, 10);
+const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
@@ -58,45 +59,113 @@ export async function watchTicketEvents() {
   return () => {};
 }
 
-export async function getRecentTicketPurchases(limit = 15, blocksToScan = 800) {
+export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
   try {
     const provider = await getCurrentProvider();
     if (!provider) return [];
 
-    const latestBlockNumber = await provider.getBlockNumber();
-    const fromBlock = Math.max(latestBlockNumber - blocksToScan, 0);
-    const purchases = [];
+    const byBlockScan = await scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets);
+    if (byBlockScan.length > 0) return byBlockScan.slice(0, limit);
 
-    for (let blockNumber = latestBlockNumber; blockNumber >= fromBlock; blockNumber -= 1) {
-      if (purchases.length >= limit) break;
+    const fromExplorer = await fetchPurchasesFromPolygonscan(limit);
+    if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
 
-      const block = await getBlockWithTransactions(provider, blockNumber);
-      if (!block || !block.transactions?.length) continue;
-
-      for (const tx of block.transactions) {
-        if (purchases.length >= limit) break;
-        if (!tx) continue;
-
-        const txData = tx.data || tx.input || '';
-        const isTargetContract = tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
-        const isTicketPurchaseCall = typeof txData === 'string' && txData.startsWith(ENTER_RAFFLE_SELECTOR);
-
-        if (isTargetContract && isTicketPurchaseCall) {
-          purchases.push({
-            hash: tx.hash,
-            from: tx.from,
-            blockNumber: tx.blockNumber ?? blockNumber,
-            timestamp: Number(block.timestamp) * 1000
-          });
-        }
-      }
-    }
-
-    return purchases.slice(0, limit);
+    return [];
   } catch (error) {
     console.warn('Failed to scan recent ticket purchases:', error);
     return [];
   }
+}
+
+async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets) {
+  const latestBlockNumber = await provider.getBlockNumber();
+  const adaptiveBlocksToScan = resolveBlocksToScan(blocksToScan, totalTickets);
+  const fromBlock = Math.max(latestBlockNumber - adaptiveBlocksToScan, 0);
+  const purchases = [];
+
+  for (let blockNumber = latestBlockNumber; blockNumber >= fromBlock; blockNumber -= 1) {
+    if (purchases.length >= limit) break;
+
+    const block = await getBlockWithTransactions(provider, blockNumber);
+    if (!block || !block.transactions?.length) continue;
+
+    for (const tx of block.transactions) {
+      if (purchases.length >= limit) break;
+      if (!tx) continue;
+
+      const txData = tx.data || tx.input || '';
+      const isTargetContract = tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
+      const isTicketPurchaseCall = typeof txData === 'string' && txData.startsWith(ENTER_RAFFLE_SELECTOR);
+
+      if (isTargetContract && isTicketPurchaseCall) {
+        purchases.push({
+          hash: tx.hash,
+          from: tx.from,
+          blockNumber: tx.blockNumber ?? blockNumber,
+          timestamp: Number(block.timestamp) * 1000
+        });
+      }
+    }
+  }
+
+  return purchases;
+}
+
+async function fetchPurchasesFromPolygonscan(limit) {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return [];
+
+  try {
+    const url = new URL(POLYGONSCAN_TXLIST_ENDPOINT);
+    url.searchParams.set('module', 'account');
+    url.searchParams.set('action', 'txlist');
+    url.searchParams.set('address', CONTRACT_ADDRESS);
+    url.searchParams.set('startblock', '0');
+    url.searchParams.set('endblock', '99999999');
+    url.searchParams.set('page', '1');
+    url.searchParams.set('offset', String(Math.max(25, limit * 3)));
+    url.searchParams.set('sort', 'desc');
+
+    const response = await fetch(url.toString(), { method: 'GET' });
+    if (!response.ok) return [];
+
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.result) ? payload.result : [];
+    if (!rows.length) return [];
+
+    const purchases = [];
+    for (const tx of rows) {
+      if (purchases.length >= limit) break;
+      if (!tx || tx.isError === '1') continue;
+
+      const to = String(tx.to || '').toLowerCase();
+      const input = String(tx.input || '').toLowerCase();
+      if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
+      if (!input.startsWith(ENTER_RAFFLE_SELECTOR.toLowerCase())) continue;
+
+      purchases.push({
+        hash: tx.hash,
+        from: tx.from,
+        blockNumber: Number(tx.blockNumber),
+        timestamp: Number(tx.timeStamp) * 1000
+      });
+    }
+
+    return purchases;
+  } catch {
+    return [];
+  }
+}
+
+function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
+  const MIN_SCAN_BLOCKS = 12000;
+  const MAX_SCAN_BLOCKS = 60000;
+
+  const baseScan = Number.isFinite(defaultBlocksToScan) ? Number(defaultBlocksToScan) : MIN_SCAN_BLOCKS;
+  const estimatedByTickets = Number.isFinite(totalTickets) && totalTickets > 0
+    ? totalTickets * 1500
+    : MIN_SCAN_BLOCKS;
+
+  return Math.min(MAX_SCAN_BLOCKS, Math.max(MIN_SCAN_BLOCKS, baseScan, estimatedByTickets));
 }
 
 async function getBlockWithTransactions(provider, blockNumber) {
