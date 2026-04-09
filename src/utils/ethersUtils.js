@@ -69,18 +69,20 @@ export async function watchTicketEvents(onTicketEvent) {
   const seenTx = new Set();
 
   const handler = async (buyer) => {
-    try {
-      const latestCount = await getTicketsCount();
-      const timestamp = new Date().toLocaleTimeString();
-      const shortAddress = buyer ? `${buyer.slice(0, 6)}...${buyer.slice(-4)}` : 'Unknown';
+    const timestamp = new Date().toLocaleTimeString();
+    const shortAddress = buyer ? `${buyer.slice(0, 6)}...${buyer.slice(-4)}` : 'Unknown';
+    let latestCount = null;
 
-      onTicketEvent({
-        message: `New ticket purchased • ${shortAddress} • ${timestamp}`,
-        ticketsCount: typeof latestCount === 'number' ? latestCount : null
-      });
+    try {
+      latestCount = await getTicketsCount();
     } catch {
-      // Ignore event handling errors to keep subscription alive.
+      latestCount = null;
     }
+
+    onTicketEvent({
+      message: `New ticket purchased • ${shortAddress} • ${timestamp}`,
+      ticketsCount: typeof latestCount === 'number' ? latestCount : null
+    });
   };
 
   currentContract.on('TicketBought', handler);
@@ -132,6 +134,9 @@ export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000
   try {
     const currentContract = await getCurrentContract();
     if (currentContract) {
+      const quickEvents = await scanRecentTicketEventsQuick(currentContract, provider, limit);
+      if (quickEvents.length > 0) return quickEvents.slice(0, limit);
+
       const byEvents = await scanPurchasesFromTicketEvents(currentContract, provider, limit, blocksToScan, totalTickets);
       if (byEvents.length > 0) return byEvents.slice(0, limit);
     }
@@ -143,13 +148,55 @@ export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000
   if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
 
   try {
-    const byBlockScan = await scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets);
+    const byBlockScan = await scanPurchasesFromBlocks(provider, limit, Math.min(blocksToScan, 5000), totalTickets);
     if (byBlockScan.length > 0) return byBlockScan.slice(0, limit);
   } catch (error) {
     console.warn('Failed to scan recent ticket purchases via RPC:', error);
   }
 
   return [];
+}
+
+async function scanRecentTicketEventsQuick(contract, provider, limit) {
+  const latestBlockNumber = await provider.getBlockNumber();
+  const QUICK_SCAN_BLOCKS = 5000;
+  const fromBlock = Math.max(latestBlockNumber - QUICK_SCAN_BLOCKS, 0);
+  let events = [];
+
+  try {
+    events = await contract.queryFilter('TicketBought', fromBlock, latestBlockNumber);
+  } catch {
+    return [];
+  }
+
+  const purchases = [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (purchases.length >= limit) break;
+    const ev = events[i];
+    const txHash = ev?.transactionHash;
+    const buyer = ev?.args?.buyer;
+    const blockNumber = ev?.blockNumber;
+    if (!txHash || !buyer || typeof blockNumber !== 'number') continue;
+
+    let timestamp = Date.now();
+    try {
+      const block = await provider.getBlock(blockNumber);
+      if (block?.timestamp) {
+        timestamp = Number(block.timestamp) * 1000;
+      }
+    } catch {
+      // Keep fallback timestamp.
+    }
+
+    purchases.push({
+      hash: txHash,
+      from: buyer,
+      blockNumber,
+      timestamp
+    });
+  }
+
+  return purchases;
 }
 
 async function scanPurchasesFromTicketEvents(contract, provider, limit, blocksToScan, totalTickets) {
