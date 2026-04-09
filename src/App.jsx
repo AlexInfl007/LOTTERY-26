@@ -128,13 +128,22 @@ export default function App() {
         setTicketsBought(initialTicketsCount);
         lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
 
-        const recentPurchases = await getRecentTicketPurchases(15, 1000);
+        const recentPurchases = await getRecentTicketPurchases(15, 5000);
         const formattedRecentFeed = recentPurchases.map((purchase) => {
           const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
           const shortAddress = formatShortAddress(purchase.from);
           return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
         });
-        setFeed(formattedRecentFeed);
+
+        if (formattedRecentFeed.length > 0) {
+          setFeed(formattedRecentFeed);
+        } else if (typeof initialTicketsCount === 'number' && initialTicketsCount > 0) {
+          setFeed([
+            `${t('events.ticketPurchased', 'New ticket purchased')} #${initialTicketsCount}`
+          ]);
+        } else {
+          setFeed([]);
+        }
         
         // Get recent winners from contract
         const recentWinners = await getRecentWinners();

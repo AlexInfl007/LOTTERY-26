@@ -72,8 +72,14 @@ export async function getRecentTicketPurchases(limit = 15, blocksToScan = 800) {
     const block = await provider.getBlock(blockNumber, true);
     if (!block || !block.transactions?.length) continue;
 
-    for (const tx of block.transactions) {
+    for (const txOrHash of block.transactions) {
       if (purchases.length >= limit) break;
+
+      const tx = typeof txOrHash === 'string'
+        ? await provider.getTransaction(txOrHash)
+        : txOrHash;
+
+      if (!tx) continue;
 
       const isTargetContract = tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
       const isTicketPurchaseCall = typeof tx.data === 'string' && tx.data.startsWith(ENTER_RAFFLE_SELECTOR);
