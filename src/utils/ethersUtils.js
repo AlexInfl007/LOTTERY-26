@@ -10,6 +10,7 @@ const PURCHASE_METHOD_SELECTORS = [
   '0x' + ethers.id('buyTicket()').slice(2, 10)
 ];
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
+const TICKET_PRICE_WEI = ethers.parseEther('30');
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
@@ -95,7 +96,9 @@ export async function watchTicketEvents(onTicketEvent) {
         const txData = tx?.data || tx?.input || '';
         const isTargetContract = tx?.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
         const isTicketLikeCall = typeof txData === 'string' && PURCHASE_METHOD_SELECTORS.some((selector) => txData.startsWith(selector));
-        if (!isTargetContract || !isTicketLikeCall) continue;
+        const valueWei = normalizeWeiValue(tx?.value);
+        const isTicketLikeValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
+        if (!isTargetContract || (!isTicketLikeCall && !isTicketLikeValue)) continue;
         if (seenTx.has(tx.hash)) continue;
 
         seenTx.add(tx.hash);
@@ -222,8 +225,10 @@ async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTicke
       const txData = tx.data || tx.input || '';
       const isTargetContract = tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
       const isTicketPurchaseCall = typeof txData === 'string' && PURCHASE_METHOD_SELECTORS.some((selector) => txData.startsWith(selector));
+      const valueWei = normalizeWeiValue(tx.value);
+      const isTicketPurchaseByValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
 
-      if (isTargetContract && isTicketPurchaseCall) {
+      if (isTargetContract && (isTicketPurchaseCall || isTicketPurchaseByValue)) {
         purchases.push({
           hash: tx.hash,
           from: tx.from,
@@ -266,10 +271,12 @@ async function fetchPurchasesFromPolygonscan(limit) {
       const to = String(tx.to || '').toLowerCase();
       const input = String(tx.input || '').toLowerCase();
       const functionName = String(tx.functionName || '').toLowerCase();
+      const valueWei = normalizeWeiValue(tx.value);
       if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
       const isKnownSelector = PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()));
       const isKnownName = functionName.includes('buyticket') || functionName.includes('enterraffle');
-      if (!isKnownSelector && !isKnownName) continue;
+      const isKnownTicketValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
+      if (!isKnownSelector && !isKnownName && !isKnownTicketValue) continue;
 
       purchases.push({
         hash: tx.hash,
@@ -297,6 +304,23 @@ function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
   return Math.min(MAX_SCAN_BLOCKS, Math.max(MIN_SCAN_BLOCKS, baseScan, estimatedByTickets));
 }
 
+function normalizeWeiValue(rawValue) {
+  if (rawValue === undefined || rawValue === null) return null;
+
+  try {
+    if (typeof rawValue === 'bigint') return rawValue;
+    if (typeof rawValue === 'number') return BigInt(rawValue);
+    if (typeof rawValue === 'string' && rawValue.length > 0) return BigInt(rawValue);
+    if (typeof rawValue === 'object' && typeof rawValue.toString === 'function') {
+      return BigInt(rawValue.toString());
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 async function getBlockWithTransactions(provider, blockNumber) {
   try {
     const hexBlockNumber = `0x${blockNumber.toString(16)}`;
@@ -310,6 +334,7 @@ async function getBlockWithTransactions(provider, blockNumber) {
           from: tx.from,
           to: tx.to,
           data: tx.input,
+          value: tx.value ? BigInt(tx.value) : null,
           blockNumber: tx.blockNumber ? parseInt(tx.blockNumber, 16) : blockNumber
         }))
       };
