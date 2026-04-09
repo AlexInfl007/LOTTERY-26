@@ -30,7 +30,6 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
-  const lastFeedSeedTsRef = useRef(0);
 
   const formatFeedFromPurchases = (purchases = []) => {
     return purchases.map((purchase) => {
@@ -46,7 +45,6 @@ export default function App() {
 
     if (formattedRecentFeed.length > 0) {
       setFeed(formattedRecentFeed);
-      lastFeedSeedTsRef.current = Date.now();
       return true;
     }
 
@@ -54,7 +52,6 @@ export default function App() {
       setFeed([
         `${t('events.ticketPurchased', 'New ticket purchased')} #${ticketCountHint}`
       ]);
-      lastFeedSeedTsRef.current = Date.now();
       return true;
     }
 
@@ -111,7 +108,6 @@ export default function App() {
           setMyTickets(0);
           setFeed([]);
           lastObservedTicketsRef.current = null;
-          lastFeedSeedTsRef.current = 0;
           setLoading(false);
         }
         return;
@@ -227,34 +223,17 @@ export default function App() {
         if (typeof updatedTicketsCount === 'number') {
           setTicketsBought(updatedTicketsCount);
 
-          const previousCount = lastObservedTicketsRef.current;
-          if (typeof previousCount === 'number' && updatedTicketsCount > previousCount) {
-            try {
-              const wasSeeded = await seedFeedFromChain(updatedTicketsCount);
-              if (!wasSeeded) {
-                const timestamp = new Date().toLocaleTimeString();
-                setFeed((previousFeed) => [
-                  `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
-                  ...previousFeed
-                ].slice(0, 15));
-              }
-            } catch {
+          try {
+            const wasSeeded = await seedFeedFromChain(updatedTicketsCount);
+            if (!wasSeeded && typeof updatedTicketsCount === 'number' && updatedTicketsCount > 0) {
               const timestamp = new Date().toLocaleTimeString();
               setFeed((previousFeed) => [
                 `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
                 ...previousFeed
               ].slice(0, 15));
             }
-          }
-
-          const FEED_RESEED_INTERVAL_MS = 120000;
-          const shouldReseed = Date.now() - lastFeedSeedTsRef.current >= FEED_RESEED_INTERVAL_MS;
-          if (shouldReseed) {
-            try {
-              await seedFeedFromChain(updatedTicketsCount);
-            } catch {
-              // Keep existing feed if reseed fails.
-            }
+          } catch {
+            // Keep the latest available feed if refresh fails.
           }
 
           lastObservedTicketsRef.current = updatedTicketsCount;
@@ -321,7 +300,6 @@ export default function App() {
         setMyTickets(t => t + 1);
         // Don't update tickets/pool immediately - wait for the blockchain event
         // The event listener will update these values when the transaction is confirmed
-        setFeed(prev => [`You ${t("events.depositedShort", "внес 30POL")}`, ...prev].slice(0,15));
       } else {
         console.error("Transaction failed:", result.error);
         alert(`Transaction failed: ${result.error}`);
