@@ -1,9 +1,11 @@
 import { ethers } from 'ethers';
 import { getContractAsync, initializeContract, getContractWithSigner } from '../../utils/contractManager';
 import { getSharedProvider, setSharedProvider } from './providerStore';
+import { CONTRACT_ADDRESS } from './contract';
 
 export const SUPPORTS_TICKET_EVENTS = false;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
+const ENTER_RAFFLE_SELECTOR = '0x' + ethers.id('enterRaffle()').slice(2, 10);
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
@@ -54,6 +56,97 @@ export async function readPrizePool() {
 export async function watchTicketEvents() {
   // ABI не содержит события покупки билета.
   return () => {};
+}
+
+export async function getRecentTicketPurchases(limit = 15, blocksToScan = 800) {
+  try {
+    const provider = await getCurrentProvider();
+    if (!provider) return [];
+
+    const latestBlockNumber = await provider.getBlockNumber();
+    const fromBlock = Math.max(latestBlockNumber - blocksToScan, 0);
+    const purchases = [];
+
+    for (let blockNumber = latestBlockNumber; blockNumber >= fromBlock; blockNumber -= 1) {
+      if (purchases.length >= limit) break;
+
+      const block = await getBlockWithTransactions(provider, blockNumber);
+      if (!block || !block.transactions?.length) continue;
+
+      for (const tx of block.transactions) {
+        if (purchases.length >= limit) break;
+        if (!tx) continue;
+
+        const txData = tx.data || tx.input || '';
+        const isTargetContract = tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
+        const isTicketPurchaseCall = typeof txData === 'string' && txData.startsWith(ENTER_RAFFLE_SELECTOR);
+
+        if (isTargetContract && isTicketPurchaseCall) {
+          purchases.push({
+            hash: tx.hash,
+            from: tx.from,
+            blockNumber: tx.blockNumber ?? blockNumber,
+            timestamp: Number(block.timestamp) * 1000
+          });
+        }
+      }
+    }
+
+    return purchases.slice(0, limit);
+  } catch (error) {
+    console.warn('Failed to scan recent ticket purchases:', error);
+    return [];
+  }
+}
+
+async function getBlockWithTransactions(provider, blockNumber) {
+  try {
+    const hexBlockNumber = `0x${blockNumber.toString(16)}`;
+    const rawBlock = await provider.send('eth_getBlockByNumber', [hexBlockNumber, true]);
+
+    if (rawBlock && Array.isArray(rawBlock.transactions)) {
+      return {
+        timestamp: parseBlockTimestamp(rawBlock.timestamp),
+        transactions: rawBlock.transactions.map((tx) => ({
+          hash: tx.hash,
+          from: tx.from,
+          to: tx.to,
+          data: tx.input,
+          blockNumber: tx.blockNumber ? parseInt(tx.blockNumber, 16) : blockNumber
+        }))
+      };
+    }
+  } catch {
+    // Fallback below for providers without raw JSON-RPC support.
+  }
+
+  const block = await provider.getBlock(blockNumber, true);
+  if (!block || !Array.isArray(block.transactions)) return null;
+
+  const transactions = [];
+  for (const txOrHash of block.transactions) {
+    const tx = typeof txOrHash === 'string'
+      ? await provider.getTransaction(txOrHash)
+      : txOrHash;
+
+    if (!tx) continue;
+    transactions.push(tx);
+  }
+
+  return {
+    timestamp: Number(block.timestamp),
+    transactions
+  };
+}
+
+function parseBlockTimestamp(timestamp) {
+  if (typeof timestamp === 'string') {
+    if (timestamp.startsWith('0x')) {
+      return parseInt(timestamp, 16);
+    }
+    return Number(timestamp);
+  }
+  return Number(timestamp);
 }
 
 export async function watchWinnerEvents(onWinner) {
