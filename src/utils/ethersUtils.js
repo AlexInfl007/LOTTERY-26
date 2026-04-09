@@ -58,13 +58,14 @@ export async function watchTicketEvents() {
   return () => {};
 }
 
-export async function getRecentTicketPurchases(limit = 15, blocksToScan = 800) {
+export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
   try {
     const provider = await getCurrentProvider();
     if (!provider) return [];
 
     const latestBlockNumber = await provider.getBlockNumber();
-    const fromBlock = Math.max(latestBlockNumber - blocksToScan, 0);
+    const adaptiveBlocksToScan = resolveBlocksToScan(blocksToScan, totalTickets);
+    const fromBlock = Math.max(latestBlockNumber - adaptiveBlocksToScan, 0);
     const purchases = [];
 
     for (let blockNumber = latestBlockNumber; blockNumber >= fromBlock; blockNumber -= 1) {
@@ -97,6 +98,18 @@ export async function getRecentTicketPurchases(limit = 15, blocksToScan = 800) {
     console.warn('Failed to scan recent ticket purchases:', error);
     return [];
   }
+}
+
+function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
+  const MIN_SCAN_BLOCKS = 60000;
+  const MAX_SCAN_BLOCKS = 400000;
+
+  const baseScan = Number.isFinite(defaultBlocksToScan) ? Number(defaultBlocksToScan) : MIN_SCAN_BLOCKS;
+  const estimatedByTickets = Number.isFinite(totalTickets) && totalTickets > 0
+    ? totalTickets * 12000
+    : MIN_SCAN_BLOCKS;
+
+  return Math.min(MAX_SCAN_BLOCKS, Math.max(MIN_SCAN_BLOCKS, baseScan, estimatedByTickets));
 }
 
 async function getBlockWithTransactions(provider, blockNumber) {

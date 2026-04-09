@@ -30,6 +30,14 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
+
+  const formatFeedFromPurchases = (purchases = []) => {
+    return purchases.map((purchase) => {
+      const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
+      const shortAddress = formatShortAddress(purchase.from);
+      return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
+    });
+  };
   const formatShortAddress = (address) => {
     if (!address || address.length < 10) return address || "";
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -130,12 +138,8 @@ export default function App() {
 
         let formattedRecentFeed = [];
         try {
-          const recentPurchases = await getRecentTicketPurchases(15, 5000);
-          formattedRecentFeed = recentPurchases.map((purchase) => {
-            const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
-            const shortAddress = formatShortAddress(purchase.from);
-            return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
-          });
+          const recentPurchases = await getRecentTicketPurchases(15, 120000, initialTicketsCount);
+          formattedRecentFeed = formatFeedFromPurchases(recentPurchases);
         } catch (feedError) {
           console.warn("Unable to preload ticket feed:", feedError);
         }
@@ -204,16 +208,25 @@ export default function App() {
 
           const previousCount = lastObservedTicketsRef.current;
           if (typeof previousCount === 'number' && updatedTicketsCount > previousCount) {
-            const newPurchases = updatedTicketsCount - previousCount;
-            const timestamp = new Date().toLocaleTimeString();
-
-            setFeed((previousFeed) => {
-              const newEvents = Array.from({ length: Math.min(newPurchases, 5) }, (_, index) => (
-                `${t('events.ticketPurchased', 'New ticket purchased')} #${previousCount + index + 1} • ${timestamp}`
-              ));
-
-              return [...newEvents, ...previousFeed].slice(0, 15);
-            });
+            try {
+              const recentPurchases = await getRecentTicketPurchases(15, 120000, updatedTicketsCount);
+              const formattedRecentFeed = formatFeedFromPurchases(recentPurchases);
+              if (formattedRecentFeed.length > 0) {
+                setFeed(formattedRecentFeed);
+              } else {
+                const timestamp = new Date().toLocaleTimeString();
+                setFeed((previousFeed) => [
+                  `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
+                  ...previousFeed
+                ].slice(0, 15));
+              }
+            } catch {
+              const timestamp = new Date().toLocaleTimeString();
+              setFeed((previousFeed) => [
+                `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
+                ...previousFeed
+              ].slice(0, 15));
+            }
           }
 
           lastObservedTicketsRef.current = updatedTicketsCount;
@@ -228,7 +241,7 @@ export default function App() {
       intervalId = setTimeout(async () => {
         await updatePool();
         scheduleUpdate(); // Schedule the next update
-      }, 10000); // Update every 10 seconds
+      }, 30000); // Update every 30 seconds
     };
     
     scheduleUpdate();
