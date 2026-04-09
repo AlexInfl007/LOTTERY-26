@@ -40,7 +40,7 @@ export default function App() {
   };
 
   const seedFeedFromChain = async (ticketCountHint = null) => {
-    const recentPurchases = await getRecentTicketPurchases(15, 30000, ticketCountHint);
+    const recentPurchases = await getRecentTicketPurchases(15, 5000, ticketCountHint);
     const formattedRecentFeed = formatFeedFromPurchases(recentPurchases);
 
     if (formattedRecentFeed.length > 0) {
