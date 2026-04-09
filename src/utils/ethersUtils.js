@@ -62,55 +62,44 @@ export async function watchTicketEvents(onTicketEvent) {
     return () => {};
   }
 
-  const provider = await getCurrentProvider();
-  if (!provider) return () => {};
+  const currentContract = await getCurrentContract();
+  if (!currentContract) return () => {};
 
-  let disposed = false;
-  let lastKnownCount = await getTicketsCount();
-  if (typeof lastKnownCount !== 'number') {
-    lastKnownCount = 0;
-  }
-
-  const handleNewBlock = async () => {
-    if (disposed) return;
-
+  const handler = async (buyer) => {
     try {
       const latestCount = await getTicketsCount();
-      if (typeof latestCount !== 'number' || latestCount <= lastKnownCount) {
-        return;
-      }
-
-      const recentPurchases = await getRecentTicketPurchases(Math.min(5, latestCount - lastKnownCount), 15000, latestCount);
-      const newestPurchase = recentPurchases[0];
-      const timestamp = newestPurchase?.timestamp ? new Date(newestPurchase.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-      const shortAddress = newestPurchase?.from
-        ? `${newestPurchase.from.slice(0, 6)}...${newestPurchase.from.slice(-4)}`
-        : 'Unknown';
+      const timestamp = new Date().toLocaleTimeString();
+      const shortAddress = buyer ? `${buyer.slice(0, 6)}...${buyer.slice(-4)}` : 'Unknown';
 
       onTicketEvent({
         message: `New ticket purchased • ${shortAddress} • ${timestamp}`,
-        ticketsCount: latestCount
+        ticketsCount: typeof latestCount === 'number' ? latestCount : null
       });
-
-      lastKnownCount = latestCount;
     } catch {
-      // Ignore sporadic provider errors and keep listener alive.
+      // Ignore event handling errors to keep subscription alive.
     }
   };
 
-  provider.on('block', handleNewBlock);
-  return () => {
-    disposed = true;
-    provider.off('block', handleNewBlock);
-  };
+  currentContract.on('TicketBought', handler);
+  return () => currentContract.off('TicketBought', handler);
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
-  const fromExplorer = await fetchPurchasesFromPolygonscan(limit);
-  if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
-
   const provider = await getCurrentProvider();
   if (!provider) return [];
+
+  try {
+    const currentContract = await getCurrentContract();
+    if (currentContract) {
+      const byEvents = await scanPurchasesFromTicketEvents(currentContract, provider, limit, blocksToScan, totalTickets);
+      if (byEvents.length > 0) return byEvents.slice(0, limit);
+    }
+  } catch {
+    // Fallbacks below.
+  }
+
+  const fromExplorer = await fetchPurchasesFromPolygonscan(limit);
+  if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
 
   try {
     const byBlockScan = await scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets);
@@ -120,6 +109,55 @@ export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000
   }
 
   return [];
+}
+
+async function scanPurchasesFromTicketEvents(contract, provider, limit, blocksToScan, totalTickets) {
+  const latestBlockNumber = await provider.getBlockNumber();
+  const adaptiveBlocksToScan = resolveBlocksToScan(blocksToScan, totalTickets);
+  const fromBlock = Math.max(latestBlockNumber - adaptiveBlocksToScan, 0);
+  const EVENT_BATCH = 3000;
+  const purchases = [];
+
+  for (let endBlock = latestBlockNumber; endBlock >= fromBlock; endBlock -= EVENT_BATCH) {
+    if (purchases.length >= limit) break;
+    const startBlock = Math.max(fromBlock, endBlock - EVENT_BATCH + 1);
+
+    let events = [];
+    try {
+      events = await contract.queryFilter('TicketBought', startBlock, endBlock);
+    } catch {
+      continue;
+    }
+
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      if (purchases.length >= limit) break;
+      const ev = events[i];
+      const txHash = ev?.transactionHash;
+      const buyer = ev?.args?.buyer;
+      const blockNumber = ev?.blockNumber;
+
+      if (!txHash || !buyer || typeof blockNumber !== 'number') continue;
+
+      let timestamp = Date.now();
+      try {
+        const block = await provider.getBlock(blockNumber);
+        if (block?.timestamp) {
+          timestamp = Number(block.timestamp) * 1000;
+        }
+      } catch {
+        // Keep fallback timestamp.
+      }
+
+      purchases.push({
+        hash: txHash,
+        from: buyer,
+        blockNumber,
+        timestamp
+      });
+    }
+  }
+
+  return purchases;
 }
 
 async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets) {
@@ -275,15 +313,16 @@ export async function watchWinnerEvents(onWinner) {
   const currentContract = await getCurrentContract();
   if (!currentContract) return () => {};
 
-  const handler = (winner, amount) => {
+  const handler = (winner, amount, round) => {
     onWinner({
       address: winner,
-      amount: ethers.formatEther(amount)
+      amount: ethers.formatEther(amount),
+      round: Number(round)
     });
   };
 
-  currentContract.on('LotteryWon', handler);
-  return () => currentContract.off('LotteryWon', handler);
+  currentContract.on('WinnerPicked', handler);
+  return () => currentContract.off('WinnerPicked', handler);
 }
 
 export async function watchPrizePoolUpdates() {
@@ -362,6 +401,23 @@ export async function getRecentWinners() {
   const provider = await getCurrentProvider();
   if (!provider) return null;
 
-  // Контракт не предоставляет историю победителей (кроме live-события LotteryWon).
-  return [];
+  const currentContract = await getCurrentContract();
+  if (!currentContract) return [];
+
+  const latestBlockNumber = await provider.getBlockNumber();
+  const fromBlock = Math.max(latestBlockNumber - 60000, 0);
+
+  try {
+    const logs = await currentContract.queryFilter('WinnerPicked', fromBlock, latestBlockNumber);
+    return logs
+      .slice(-15)
+      .reverse()
+      .map((log) => ({
+        address: log.args?.winner,
+        amount: ethers.formatEther(log.args?.prize || 0n),
+        round: Number(log.args?.round || 0)
+      }));
+  } catch {
+    return [];
+  }
 }
