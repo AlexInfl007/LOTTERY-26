@@ -75,6 +75,13 @@ export const CONTRACT_ABI = [
   },
   {
     "inputs": [],
+    "name": "buyTicket",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "enterRaffle",
     "outputs": [],
     "stateMutability": "payable",

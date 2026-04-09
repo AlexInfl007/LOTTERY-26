@@ -5,7 +5,10 @@ import { CONTRACT_ADDRESS } from './contract';
 
 export const SUPPORTS_TICKET_EVENTS = false;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
-const ENTER_RAFFLE_SELECTOR = '0x' + ethers.id('enterRaffle()').slice(2, 10);
+const PURCHASE_METHOD_SELECTORS = [
+  '0x' + ethers.id('enterRaffle()').slice(2, 10),
+  '0x' + ethers.id('buyTicket()').slice(2, 10)
+];
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
 
 export function updateProvider(newProvider) {
@@ -54,9 +57,52 @@ export async function readPrizePool() {
   }
 }
 
-export async function watchTicketEvents() {
-  // ABI не содержит события покупки билета.
-  return () => {};
+export async function watchTicketEvents(onTicketEvent) {
+  if (typeof onTicketEvent !== 'function') {
+    return () => {};
+  }
+
+  const provider = await getCurrentProvider();
+  if (!provider) return () => {};
+
+  let disposed = false;
+  let lastKnownCount = await getTicketsCount();
+  if (typeof lastKnownCount !== 'number') {
+    lastKnownCount = 0;
+  }
+
+  const handleNewBlock = async () => {
+    if (disposed) return;
+
+    try {
+      const latestCount = await getTicketsCount();
+      if (typeof latestCount !== 'number' || latestCount <= lastKnownCount) {
+        return;
+      }
+
+      const recentPurchases = await getRecentTicketPurchases(Math.min(5, latestCount - lastKnownCount), 15000, latestCount);
+      const newestPurchase = recentPurchases[0];
+      const timestamp = newestPurchase?.timestamp ? new Date(newestPurchase.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+      const shortAddress = newestPurchase?.from
+        ? `${newestPurchase.from.slice(0, 6)}...${newestPurchase.from.slice(-4)}`
+        : 'Unknown';
+
+      onTicketEvent({
+        message: `New ticket purchased • ${shortAddress} • ${timestamp}`,
+        ticketsCount: latestCount
+      });
+
+      lastKnownCount = latestCount;
+    } catch {
+      // Ignore sporadic provider errors and keep listener alive.
+    }
+  };
+
+  provider.on('block', handleNewBlock);
+  return () => {
+    disposed = true;
+    provider.off('block', handleNewBlock);
+  };
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
@@ -95,7 +141,7 @@ async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTicke
 
       const txData = tx.data || tx.input || '';
       const isTargetContract = tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
-      const isTicketPurchaseCall = typeof txData === 'string' && txData.startsWith(ENTER_RAFFLE_SELECTOR);
+      const isTicketPurchaseCall = typeof txData === 'string' && PURCHASE_METHOD_SELECTORS.some((selector) => txData.startsWith(selector));
 
       if (isTargetContract && isTicketPurchaseCall) {
         purchases.push({
@@ -140,7 +186,7 @@ async function fetchPurchasesFromPolygonscan(limit) {
       const to = String(tx.to || '').toLowerCase();
       const input = String(tx.input || '').toLowerCase();
       if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
-      if (!input.startsWith(ENTER_RAFFLE_SELECTOR.toLowerCase())) continue;
+      if (!PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()))) continue;
 
       purchases.push({
         hash: tx.hash,
@@ -249,10 +295,20 @@ export async function buyTicket(signer) {
       throw new Error(`Insufficient balance. Need 30 POL but only have ${(Number(ethers.formatEther(userBalance))).toFixed(4)} POL`);
     }
 
-    const tx = await contractWithSigner.enterRaffle({
-      value: ticketPrice,
-      gasLimit: 500000
-    });
+    let tx;
+    if (typeof contractWithSigner.buyTicket === 'function') {
+      tx = await contractWithSigner.buyTicket({
+        value: ticketPrice,
+        gasLimit: 500000
+      });
+    } else if (typeof contractWithSigner.enterRaffle === 'function') {
+      tx = await contractWithSigner.enterRaffle({
+        value: ticketPrice,
+        gasLimit: 500000
+      });
+    } else {
+      throw new Error('Contract does not expose buyTicket() or enterRaffle()');
+    }
 
     const receipt = await tx.wait();
     if (receipt?.status !== 1) {
