@@ -170,9 +170,18 @@ export default function App() {
         const recentWinners = await getRecentWinners();
         setWinners(recentWinners);
         
-        unsubscribeTicketRef.current = await watchTicketEvents((eventMessage) => {
-          setFeed(prev => [eventMessage, ...prev].slice(0,15));
-          setTicketsBought(t => (typeof t === 'number' ? t + 1 : 1));
+        unsubscribeTicketRef.current = await watchTicketEvents((ticketEvent) => {
+          const nextMessage = typeof ticketEvent === 'string' ? ticketEvent : ticketEvent?.message;
+          if (nextMessage) {
+            setFeed(prev => [nextMessage, ...prev].slice(0,15));
+          }
+
+          if (typeof ticketEvent?.ticketsCount === 'number') {
+            setTicketsBought(ticketEvent.ticketsCount);
+            lastObservedTicketsRef.current = ticketEvent.ticketsCount;
+          } else {
+            setTicketsBought(t => (typeof t === 'number' ? t + 1 : 1));
+          }
         });
 
         unsubscribeWinnerRef.current = watchWinnerEvents && typeof watchWinnerEvents === 'function'
@@ -249,6 +258,13 @@ export default function App() {
           }
 
           lastObservedTicketsRef.current = updatedTicketsCount;
+        }
+
+        if (walletAddress) {
+          const updatedUserTickets = await getUserTickets(walletAddress);
+          if (typeof updatedUserTickets === 'number') {
+            setMyTickets(updatedUserTickets);
+          }
         }
       } catch (error) {
         console.error("Error updating prize pool:", error);

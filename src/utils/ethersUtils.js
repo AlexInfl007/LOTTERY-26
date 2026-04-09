@@ -5,8 +5,12 @@ import { CONTRACT_ADDRESS } from './contract';
 
 export const SUPPORTS_TICKET_EVENTS = false;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
-const ENTER_RAFFLE_SELECTOR = '0x' + ethers.id('enterRaffle()').slice(2, 10);
+const PURCHASE_METHOD_SELECTORS = [
+  '0x' + ethers.id('enterRaffle()').slice(2, 10),
+  '0x' + ethers.id('buyTicket()').slice(2, 10)
+];
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
+const TICKET_PRICE_WEI = ethers.parseEther('30');
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
@@ -54,27 +58,147 @@ export async function readPrizePool() {
   }
 }
 
-export async function watchTicketEvents() {
-  // ABI не содержит события покупки билета.
-  return () => {};
+export async function watchTicketEvents(onTicketEvent) {
+  if (typeof onTicketEvent !== 'function') {
+    return () => {};
+  }
+
+  const currentContract = await getCurrentContract();
+  if (!currentContract) return () => {};
+  const provider = await getCurrentProvider();
+  const seenTx = new Set();
+
+  const handler = async (buyer) => {
+    try {
+      const latestCount = await getTicketsCount();
+      const timestamp = new Date().toLocaleTimeString();
+      const shortAddress = buyer ? `${buyer.slice(0, 6)}...${buyer.slice(-4)}` : 'Unknown';
+
+      onTicketEvent({
+        message: `New ticket purchased • ${shortAddress} • ${timestamp}`,
+        ticketsCount: typeof latestCount === 'number' ? latestCount : null
+      });
+    } catch {
+      // Ignore event handling errors to keep subscription alive.
+    }
+  };
+
+  currentContract.on('TicketBought', handler);
+
+  const fallbackBlockHandler = async (blockNumber) => {
+    if (!provider) return;
+
+    try {
+      const block = await getBlockWithTransactions(provider, blockNumber);
+      if (!block?.transactions?.length) return;
+
+      for (const tx of block.transactions) {
+        const txData = tx?.data || tx?.input || '';
+        const isTargetContract = tx?.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
+        const isTicketLikeCall = typeof txData === 'string' && PURCHASE_METHOD_SELECTORS.some((selector) => txData.startsWith(selector));
+        const valueWei = normalizeWeiValue(tx?.value);
+        const isTicketLikeValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
+        if (!isTargetContract || (!isTicketLikeCall && !isTicketLikeValue)) continue;
+        if (seenTx.has(tx.hash)) continue;
+
+        seenTx.add(tx.hash);
+        const shortAddress = tx?.from ? `${tx.from.slice(0, 6)}...${tx.from.slice(-4)}` : 'Unknown';
+        onTicketEvent({
+          message: `New ticket purchased • ${shortAddress} • ${new Date().toLocaleTimeString()}`,
+          ticketsCount: null
+        });
+      }
+    } catch {
+      // Ignore fallback scanning errors.
+    }
+  };
+
+  if (provider) {
+    provider.on('block', fallbackBlockHandler);
+  }
+
+  return () => {
+    currentContract.off('TicketBought', handler);
+    if (provider) {
+      provider.off('block', fallbackBlockHandler);
+    }
+  };
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
-  try {
-    const provider = await getCurrentProvider();
-    if (!provider) return [];
+  const provider = await getCurrentProvider();
+  if (!provider) return [];
 
+  try {
+    const currentContract = await getCurrentContract();
+    if (currentContract) {
+      const byEvents = await scanPurchasesFromTicketEvents(currentContract, provider, limit, blocksToScan, totalTickets);
+      if (byEvents.length > 0) return byEvents.slice(0, limit);
+    }
+  } catch {
+    // Fallbacks below.
+  }
+
+  const fromExplorer = await fetchPurchasesFromPolygonscan(limit);
+  if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
+
+  try {
     const byBlockScan = await scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets);
     if (byBlockScan.length > 0) return byBlockScan.slice(0, limit);
-
-    const fromExplorer = await fetchPurchasesFromPolygonscan(limit);
-    if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
-
-    return [];
   } catch (error) {
-    console.warn('Failed to scan recent ticket purchases:', error);
-    return [];
+    console.warn('Failed to scan recent ticket purchases via RPC:', error);
   }
+
+  return [];
+}
+
+async function scanPurchasesFromTicketEvents(contract, provider, limit, blocksToScan, totalTickets) {
+  const latestBlockNumber = await provider.getBlockNumber();
+  const adaptiveBlocksToScan = resolveBlocksToScan(blocksToScan, totalTickets);
+  const fromBlock = Math.max(latestBlockNumber - adaptiveBlocksToScan, 0);
+  const EVENT_BATCH = 3000;
+  const purchases = [];
+
+  for (let endBlock = latestBlockNumber; endBlock >= fromBlock; endBlock -= EVENT_BATCH) {
+    if (purchases.length >= limit) break;
+    const startBlock = Math.max(fromBlock, endBlock - EVENT_BATCH + 1);
+
+    let events = [];
+    try {
+      events = await contract.queryFilter('TicketBought', startBlock, endBlock);
+    } catch {
+      continue;
+    }
+
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      if (purchases.length >= limit) break;
+      const ev = events[i];
+      const txHash = ev?.transactionHash;
+      const buyer = ev?.args?.buyer;
+      const blockNumber = ev?.blockNumber;
+
+      if (!txHash || !buyer || typeof blockNumber !== 'number') continue;
+
+      let timestamp = Date.now();
+      try {
+        const block = await provider.getBlock(blockNumber);
+        if (block?.timestamp) {
+          timestamp = Number(block.timestamp) * 1000;
+        }
+      } catch {
+        // Keep fallback timestamp.
+      }
+
+      purchases.push({
+        hash: txHash,
+        from: buyer,
+        blockNumber,
+        timestamp
+      });
+    }
+  }
+
+  return purchases;
 }
 
 async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTickets) {
@@ -86,7 +210,12 @@ async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTicke
   for (let blockNumber = latestBlockNumber; blockNumber >= fromBlock; blockNumber -= 1) {
     if (purchases.length >= limit) break;
 
-    const block = await getBlockWithTransactions(provider, blockNumber);
+    let block = null;
+    try {
+      block = await getBlockWithTransactions(provider, blockNumber);
+    } catch {
+      continue;
+    }
     if (!block || !block.transactions?.length) continue;
 
     for (const tx of block.transactions) {
@@ -95,9 +224,11 @@ async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTicke
 
       const txData = tx.data || tx.input || '';
       const isTargetContract = tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
-      const isTicketPurchaseCall = typeof txData === 'string' && txData.startsWith(ENTER_RAFFLE_SELECTOR);
+      const isTicketPurchaseCall = typeof txData === 'string' && PURCHASE_METHOD_SELECTORS.some((selector) => txData.startsWith(selector));
+      const valueWei = normalizeWeiValue(tx.value);
+      const isTicketPurchaseByValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
 
-      if (isTargetContract && isTicketPurchaseCall) {
+      if (isTargetContract && (isTicketPurchaseCall || isTicketPurchaseByValue)) {
         purchases.push({
           hash: tx.hash,
           from: tx.from,
@@ -139,8 +270,13 @@ async function fetchPurchasesFromPolygonscan(limit) {
 
       const to = String(tx.to || '').toLowerCase();
       const input = String(tx.input || '').toLowerCase();
+      const functionName = String(tx.functionName || '').toLowerCase();
+      const valueWei = normalizeWeiValue(tx.value);
       if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
-      if (!input.startsWith(ENTER_RAFFLE_SELECTOR.toLowerCase())) continue;
+      const isKnownSelector = PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()));
+      const isKnownName = functionName.includes('buyticket') || functionName.includes('enterraffle');
+      const isKnownTicketValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
+      if (!isKnownSelector && !isKnownName && !isKnownTicketValue) continue;
 
       purchases.push({
         hash: tx.hash,
@@ -157,8 +293,8 @@ async function fetchPurchasesFromPolygonscan(limit) {
 }
 
 function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
-  const MIN_SCAN_BLOCKS = 12000;
-  const MAX_SCAN_BLOCKS = 60000;
+  const MIN_SCAN_BLOCKS = 25000;
+  const MAX_SCAN_BLOCKS = 180000;
 
   const baseScan = Number.isFinite(defaultBlocksToScan) ? Number(defaultBlocksToScan) : MIN_SCAN_BLOCKS;
   const estimatedByTickets = Number.isFinite(totalTickets) && totalTickets > 0
@@ -166,6 +302,23 @@ function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
     : MIN_SCAN_BLOCKS;
 
   return Math.min(MAX_SCAN_BLOCKS, Math.max(MIN_SCAN_BLOCKS, baseScan, estimatedByTickets));
+}
+
+function normalizeWeiValue(rawValue) {
+  if (rawValue === undefined || rawValue === null) return null;
+
+  try {
+    if (typeof rawValue === 'bigint') return rawValue;
+    if (typeof rawValue === 'number') return BigInt(rawValue);
+    if (typeof rawValue === 'string' && rawValue.length > 0) return BigInt(rawValue);
+    if (typeof rawValue === 'object' && typeof rawValue.toString === 'function') {
+      return BigInt(rawValue.toString());
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 async function getBlockWithTransactions(provider, blockNumber) {
@@ -181,6 +334,7 @@ async function getBlockWithTransactions(provider, blockNumber) {
           from: tx.from,
           to: tx.to,
           data: tx.input,
+          value: tx.value ? BigInt(tx.value) : null,
           blockNumber: tx.blockNumber ? parseInt(tx.blockNumber, 16) : blockNumber
         }))
       };
@@ -222,15 +376,16 @@ export async function watchWinnerEvents(onWinner) {
   const currentContract = await getCurrentContract();
   if (!currentContract) return () => {};
 
-  const handler = (winner, amount) => {
+  const handler = (winner, amount, round) => {
     onWinner({
       address: winner,
-      amount: ethers.formatEther(amount)
+      amount: ethers.formatEther(amount),
+      round: Number(round)
     });
   };
 
-  currentContract.on('LotteryWon', handler);
-  return () => currentContract.off('LotteryWon', handler);
+  currentContract.on('WinnerPicked', handler);
+  return () => currentContract.off('WinnerPicked', handler);
 }
 
 export async function watchPrizePoolUpdates() {
@@ -249,10 +404,20 @@ export async function buyTicket(signer) {
       throw new Error(`Insufficient balance. Need 30 POL but only have ${(Number(ethers.formatEther(userBalance))).toFixed(4)} POL`);
     }
 
-    const tx = await contractWithSigner.enterRaffle({
-      value: ticketPrice,
-      gasLimit: 500000
-    });
+    let tx;
+    if (typeof contractWithSigner.buyTicket === 'function') {
+      tx = await contractWithSigner.buyTicket({
+        value: ticketPrice,
+        gasLimit: 500000
+      });
+    } else if (typeof contractWithSigner.enterRaffle === 'function') {
+      tx = await contractWithSigner.enterRaffle({
+        value: ticketPrice,
+        gasLimit: 500000
+      });
+    } else {
+      throw new Error('Contract does not expose buyTicket() or enterRaffle()');
+    }
 
     const receipt = await tx.wait();
     if (receipt?.status !== 1) {
@@ -299,6 +464,23 @@ export async function getRecentWinners() {
   const provider = await getCurrentProvider();
   if (!provider) return null;
 
-  // Контракт не предоставляет историю победителей (кроме live-события LotteryWon).
-  return [];
+  const currentContract = await getCurrentContract();
+  if (!currentContract) return [];
+
+  const latestBlockNumber = await provider.getBlockNumber();
+  const fromBlock = Math.max(latestBlockNumber - 60000, 0);
+
+  try {
+    const logs = await currentContract.queryFilter('WinnerPicked', fromBlock, latestBlockNumber);
+    return logs
+      .slice(-15)
+      .reverse()
+      .map((log) => ({
+        address: log.args?.winner,
+        amount: ethers.formatEther(log.args?.prize || 0n),
+        round: Number(log.args?.round || 0)
+      }));
+  } catch {
+    return [];
+  }
 }
