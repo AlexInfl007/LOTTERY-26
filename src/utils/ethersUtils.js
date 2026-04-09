@@ -1,9 +1,11 @@
 import { ethers } from 'ethers';
 import { getContractAsync, initializeContract, getContractWithSigner } from '../../utils/contractManager';
 import { getSharedProvider, setSharedProvider } from './providerStore';
+import { CONTRACT_ADDRESS } from './contract';
 
 export const SUPPORTS_TICKET_EVENTS = false;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
+const ENTER_RAFFLE_SELECTOR = '0x' + ethers.id('enterRaffle()').slice(2, 10);
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
@@ -54,6 +56,40 @@ export async function readPrizePool() {
 export async function watchTicketEvents() {
   // ABI не содержит события покупки билета.
   return () => {};
+}
+
+export async function getRecentTicketPurchases(limit = 15, blocksToScan = 800) {
+  const provider = await getCurrentProvider();
+  if (!provider) return [];
+
+  const latestBlockNumber = await provider.getBlockNumber();
+  const fromBlock = Math.max(latestBlockNumber - blocksToScan, 0);
+  const purchases = [];
+
+  for (let blockNumber = latestBlockNumber; blockNumber >= fromBlock; blockNumber -= 1) {
+    if (purchases.length >= limit) break;
+
+    const block = await provider.getBlock(blockNumber, true);
+    if (!block || !block.transactions?.length) continue;
+
+    for (const tx of block.transactions) {
+      if (purchases.length >= limit) break;
+
+      const isTargetContract = tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase();
+      const isTicketPurchaseCall = typeof tx.data === 'string' && tx.data.startsWith(ENTER_RAFFLE_SELECTOR);
+
+      if (isTargetContract && isTicketPurchaseCall) {
+        purchases.push({
+          hash: tx.hash,
+          from: tx.from,
+          blockNumber: tx.blockNumber,
+          timestamp: Number(block.timestamp) * 1000
+        });
+      }
+    }
+  }
+
+  return purchases.slice(0, limit);
 }
 
 export async function watchWinnerEvents(onWinner) {

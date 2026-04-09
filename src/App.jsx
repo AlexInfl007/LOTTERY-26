@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider, getRecentTicketPurchases } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -30,6 +30,10 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
+  const formatShortAddress = (address) => {
+    if (!address || address.length < 10) return address || "";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
 
   useEffect(() => {
     const onHashChange = () => setIsAboutPage(window.location.hash === "#/about");
@@ -123,6 +127,14 @@ export default function App() {
         const initialTicketsCount = await getTicketsCount();
         setTicketsBought(initialTicketsCount);
         lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
+
+        const recentPurchases = await getRecentTicketPurchases(15, 1000);
+        const formattedRecentFeed = recentPurchases.map((purchase) => {
+          const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
+          const shortAddress = formatShortAddress(purchase.from);
+          return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
+        });
+        setFeed(formattedRecentFeed);
         
         // Get recent winners from contract
         const recentWinners = await getRecentWinners();
@@ -202,7 +214,7 @@ export default function App() {
       intervalId = setTimeout(async () => {
         await updatePool();
         scheduleUpdate(); // Schedule the next update
-      }, 30000); // Update every 30 seconds
+      }, 10000); // Update every 10 seconds
     };
     
     scheduleUpdate();
