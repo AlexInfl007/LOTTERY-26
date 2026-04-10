@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider, getRecentTicketPurchases } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketPurchases } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -93,98 +93,60 @@ export default function App() {
     });
   }, [isAboutPage, t, i18n.language]);
 
-  // Initialize data from smart contract when wallet is connected
+  // Initialize data from smart contract - works for all users (with or without wallet)
   useEffect(() => {
     let mounted = true;
     
     const initializeData = async () => {
-      // Check if wallet is connected
-      const currentProvider = await getCurrentProvider();
-      if (!currentProvider) {
-        if (mounted) {
-          setPoolAmount(null);
-          setTicketsBought(null);
-          setWinners(null);
-          setMyTickets(0);
-          setFeed([]);
-          lastObservedTicketsRef.current = null;
-          setLoading(false);
-        }
-        return;
-      }
-      
       try {
-        // Wait for contract initialization (max 10 seconds with retries)
-        let attempts = 0;
-        let contractInitialized = false;
-        while (attempts < 20 && !contractInitialized) {
-          try {
-            await readPrizePool();
-            contractInitialized = true; // Mark as initialized if no error thrown
-          } catch (error) {
-            if (error.message && !error.message.includes('Contract not initialized') && 
-                !error.message.includes('No provider available') && 
-                !error.message.includes('No valid provider')) {
-              // If it's a different error, rethrow it
-              throw error;
-            }
-            await new Promise(resolve => {
-              const channel = new MessageChannel();
-              channel.port1.onmessage = () => resolve();
-              channel.port2.postMessage('');
-              channel.port1.close();
-              channel.port2.close();
-            });
-            attempts++;
-          }
-        }
-        
-        if (!contractInitialized) {
-          console.error("Contract failed to initialize after multiple attempts");
-          throw new Error("Contract failed to initialize");
-        }
-        
-        if (!mounted) return;
-        
-        // Get initial pool amount from contract
+        // Get initial pool amount from contract (works without wallet)
         const initialPool = await readPrizePool();
-        setPoolAmount(initialPool);
-        
-        // Get initial tickets count from contract
-        const initialTicketsCount = await getTicketsCount();
-        setTicketsBought(initialTicketsCount);
-        lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
-
-        try {
-          await seedFeedFromChain(initialTicketsCount);
-        } catch (feedError) {
-          console.warn("Unable to preload ticket feed:", feedError);
-          setFeed([]);
+        if (mounted && initialPool !== null) {
+          setPoolAmount(initialPool);
         }
         
-        // Get recent winners from contract
-        const recentWinners = await getRecentWinners();
-        setWinners(recentWinners);
+        // Get initial tickets count from contract (works without wallet)
+        const initialTicketsCount = await getTicketsCount();
+        if (mounted && initialTicketsCount !== null) {
+          setTicketsBought(initialTicketsCount);
+          lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
+
+          try {
+            await seedFeedFromChain(initialTicketsCount);
+          } catch (feedError) {
+            console.warn("Unable to preload ticket feed:", feedError);
+            if (mounted) setFeed([]);
+          }
+        }
         
-        unsubscribeTicketRef.current = await watchTicketEvents((ticketEvent) => {
-          const nextMessage = typeof ticketEvent === 'string' ? ticketEvent : ticketEvent?.message;
-          if (nextMessage) {
-            setFeed(prev => [nextMessage, ...prev].slice(0,15));
-          }
+        // Get recent winners from contract (works without wallet)
+        const recentWinners = await getRecentWinners();
+        if (mounted) {
+          setWinners(recentWinners);
+        }
+        
+        // Only subscribe to live events if wallet is connected
+        if (walletAddress) {
+          unsubscribeTicketRef.current = await watchTicketEvents((ticketEvent) => {
+            const nextMessage = typeof ticketEvent === 'string' ? ticketEvent : ticketEvent?.message;
+            if (nextMessage) {
+              setFeed(prev => [nextMessage, ...prev].slice(0,15));
+            }
 
-          if (typeof ticketEvent?.ticketsCount === 'number') {
-            setTicketsBought(ticketEvent.ticketsCount);
-            lastObservedTicketsRef.current = ticketEvent.ticketsCount;
-          } else {
-            setTicketsBought(t => (typeof t === 'number' ? t + 1 : 1));
-          }
-        });
+            if (typeof ticketEvent?.ticketsCount === 'number') {
+              setTicketsBought(ticketEvent.ticketsCount);
+              lastObservedTicketsRef.current = ticketEvent.ticketsCount;
+            } else {
+              setTicketsBought(t => (typeof t === 'number' ? t + 1 : 1));
+            }
+          });
 
-        unsubscribeWinnerRef.current = watchWinnerEvents && typeof watchWinnerEvents === 'function'
-          ? await watchWinnerEvents((winnerData) => {
-              setWinners(prev => [winnerData, ...prev].slice(0, 15));
-            })
-          : () => {};
+          unsubscribeWinnerRef.current = watchWinnerEvents && typeof watchWinnerEvents === 'function'
+            ? await watchWinnerEvents((winnerData) => {
+                setWinners(prev => [winnerData, ...prev].slice(0, 15));
+              })
+            : () => {};
+        }
       } catch (error) {
         console.error("Error initializing data:", error);
       } finally {
@@ -203,21 +165,16 @@ export default function App() {
     };
   }, [walletAddress]);
 
-  // Periodically update the prize pool to reflect new contributions when wallet is connected
+  // Periodically update the prize pool to reflect new contributions (works for all users)
   useEffect(() => {
     let intervalId;
     
     const updatePool = async () => {
-      // Check if wallet is connected before attempting to update
-      const currentProvider = await getCurrentProvider();
-      if (!currentProvider) {
-        // Skip update if no wallet connected
-        return;
-      }
-      
       try {
         const updatedPool = await readPrizePool();
-        setPoolAmount(updatedPool);
+        if (updatedPool !== null) {
+          setPoolAmount(updatedPool);
+        }
 
         const updatedTicketsCount = await getTicketsCount();
         if (typeof updatedTicketsCount === 'number') {
@@ -409,7 +366,7 @@ export default function App() {
                   <LuckyButton />
                 </div>
 
-                <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {!walletAddress ? '*' : myTickets}</div>
+                <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {walletAddress ? myTickets : (ticketsBought !== null ? '*' : '—')}</div>
               </section>
 
               <HowItWorks onReadMore={openAboutPage} />

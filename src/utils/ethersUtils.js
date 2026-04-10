@@ -12,6 +12,47 @@ const PURCHASE_METHOD_SELECTORS = [
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
 const TICKET_PRICE_WEI = ethers.parseEther('30');
 
+// Create a public provider that doesn't require wallet connection
+let publicProvider = null;
+
+function createPublicProvider() {
+  if (typeof window === 'undefined') return null;
+  
+  // Try to use existing ethereum provider or create a fallback RPC provider
+  if (window.ethereum) {
+    try {
+      return new ethers.BrowserProvider(window.ethereum);
+    } catch {
+      // Fallback to public RPC
+    }
+  }
+  
+  // Fallback to public Polygon RPC endpoints
+  const rpcUrls = [
+    'https://polygon-rpc.com',
+    'https://rpc-mainnet.matic.network',
+    'https://polygon.publicnode.com'
+  ];
+  
+  for (const url of rpcUrls) {
+    try {
+      const provider = new ethers.JsonRpcProvider(url, 137, { staticNetwork: ethers.Network.from(137) });
+      return provider;
+    } catch {
+      continue;
+    }
+  }
+  
+  return null;
+}
+
+export function getPublicProvider() {
+  if (!publicProvider) {
+    publicProvider = createPublicProvider();
+  }
+  return publicProvider;
+}
+
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
 }
@@ -34,6 +75,16 @@ export async function getCurrentProvider() {
   }
 }
 
+// Get provider for read-only operations (works without wallet connection)
+export async function getReadProvider() {
+  // First try the connected wallet provider
+  const connectedProvider = await getCurrentProvider();
+  if (connectedProvider) return connectedProvider;
+  
+  // Fallback to public provider
+  return getPublicProvider();
+}
+
 export async function getCurrentContract() {
   const provider = await getCurrentProvider();
   if (!provider) return null;
@@ -46,8 +97,21 @@ export async function getCurrentContract() {
   }
 }
 
+// Get contract instance for read-only operations (works without wallet connection)
+export async function getReadContract() {
+  const provider = await getReadProvider();
+  if (!provider) return null;
+
+  try {
+    // Create a new contract instance with the read provider
+    return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+  } catch {
+    return null;
+  }
+}
+
 export async function readPrizePool() {
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return null;
 
   try {
@@ -128,11 +192,11 @@ export async function watchTicketEvents(onTicketEvent) {
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
-  const provider = await getCurrentProvider();
+  const provider = await getReadProvider();
   if (!provider) return [];
 
   try {
-    const currentContract = await getCurrentContract();
+    const currentContract = await getReadContract();
     if (currentContract) {
       const quickEvents = await scanRecentTicketEventsQuick(currentContract, provider, limit);
       if (quickEvents.length > 0) return quickEvents.slice(0, limit);
@@ -484,7 +548,7 @@ export async function buyTicket(signer) {
 }
 
 export async function getUserTickets(walletAddress) {
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return 0;
 
   try {
@@ -496,7 +560,7 @@ export async function getUserTickets(walletAddress) {
 }
 
 export async function getTicketsCount() {
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return null;
 
   try {
@@ -508,10 +572,10 @@ export async function getTicketsCount() {
 }
 
 export async function getRecentWinners() {
-  const provider = await getCurrentProvider();
+  const provider = await getReadProvider();
   if (!provider) return null;
 
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return [];
 
   const latestBlockNumber = await provider.getBlockNumber();
