@@ -19,6 +19,21 @@ const PUBLIC_RPC_URLS = [
 ];
 let readOnlyProvider = null;
 
+function buildExplorerUrl(params = {}) {
+  const isBrowser = typeof window !== 'undefined' && window.location?.origin;
+  const base = isBrowser
+    ? new URL('/api/polygonscan', window.location.origin)
+    : new URL(POLYGONSCAN_TXLIST_ENDPOINT);
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      base.searchParams.set(key, String(value));
+    }
+  });
+
+  return base.toString();
+}
+
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
 }
@@ -412,17 +427,16 @@ async function fetchPurchasesFromPolygonscan(limit) {
   if (typeof window === 'undefined' || typeof fetch !== 'function') return [];
 
   try {
-    const url = new URL(POLYGONSCAN_TXLIST_ENDPOINT);
-    url.searchParams.set('module', 'account');
-    url.searchParams.set('action', 'txlist');
-    url.searchParams.set('address', CONTRACT_ADDRESS);
-    url.searchParams.set('startblock', '0');
-    url.searchParams.set('endblock', '99999999');
-    url.searchParams.set('page', '1');
-    url.searchParams.set('offset', String(Math.max(25, limit * 3)));
-    url.searchParams.set('sort', 'desc');
-
-    const response = await fetch(url.toString(), { method: 'GET' });
+    const response = await fetch(buildExplorerUrl({
+      module: 'account',
+      action: 'txlist',
+      address: CONTRACT_ADDRESS,
+      startblock: 0,
+      endblock: 99999999,
+      page: 1,
+      offset: Math.max(25, limit * 3),
+      sort: 'desc'
+    }), { method: 'GET' });
     if (!response.ok) return [];
 
     const payload = await response.json();
@@ -462,17 +476,16 @@ async function fetchTicketEventsFromPolygonscan(limit = 50) {
   if (typeof fetch !== 'function') return [];
 
   try {
-    const url = new URL(POLYGONSCAN_TXLIST_ENDPOINT);
-    url.searchParams.set('module', 'logs');
-    url.searchParams.set('action', 'getLogs');
-    url.searchParams.set('fromBlock', '0');
-    url.searchParams.set('toBlock', 'latest');
-    url.searchParams.set('address', CONTRACT_ADDRESS);
-    url.searchParams.set('topic0', TICKET_BOUGHT_TOPIC);
-    url.searchParams.set('page', '1');
-    url.searchParams.set('offset', String(Math.max(20, limit)));
-
-    const response = await fetch(url.toString(), { method: 'GET' });
+    const response = await fetch(buildExplorerUrl({
+      module: 'logs',
+      action: 'getLogs',
+      fromBlock: 0,
+      toBlock: 'latest',
+      address: CONTRACT_ADDRESS,
+      topic0: TICKET_BOUGHT_TOPIC,
+      page: 1,
+      offset: Math.max(20, limit)
+    }), { method: 'GET' });
     if (!response.ok) return [];
 
     const payload = await response.json();
@@ -689,14 +702,13 @@ async function callViaPolygonscan(functionName, args) {
 
   const iface = new ethers.Interface(CONTRACT_ABI);
   const data = iface.encodeFunctionData(functionName, args);
-  const url = new URL(POLYGONSCAN_TXLIST_ENDPOINT);
-  url.searchParams.set('module', 'proxy');
-  url.searchParams.set('action', 'eth_call');
-  url.searchParams.set('to', CONTRACT_ADDRESS);
-  url.searchParams.set('data', data);
-  url.searchParams.set('tag', 'latest');
-
-  const response = await fetch(url.toString(), { method: 'GET' });
+  const response = await fetch(buildExplorerUrl({
+    module: 'proxy',
+    action: 'eth_call',
+    to: CONTRACT_ADDRESS,
+    data,
+    tag: 'latest'
+  }), { method: 'GET' });
   if (!response.ok) throw new Error('Polygonscan eth_call failed');
   const payload = await response.json();
   const resultHex = payload?.result;
