@@ -169,16 +169,24 @@ export async function getRecentTicketEvents(limit = 50) {
 
   const latestBlockNumber = await provider.getBlockNumber();
   const EVENT_BATCH = 3000;
+  const MAX_SCAN_BLOCKS = 250000;
+  const MIN_BLOCK = Math.max(0, latestBlockNumber - MAX_SCAN_BLOCKS);
+  let consecutiveFailures = 0;
   const events = [];
 
-  for (let endBlock = latestBlockNumber; endBlock >= 0; endBlock -= EVENT_BATCH) {
+  for (let endBlock = latestBlockNumber; endBlock >= MIN_BLOCK; endBlock -= EVENT_BATCH) {
     if (events.length >= limit) break;
-    const startBlock = Math.max(0, endBlock - EVENT_BATCH + 1);
+    const startBlock = Math.max(MIN_BLOCK, endBlock - EVENT_BATCH + 1);
 
     let batch = [];
     try {
       batch = await currentContract.queryFilter('TicketBought', startBlock, endBlock);
+      consecutiveFailures = 0;
     } catch {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 5) {
+        break;
+      }
       continue;
     }
 

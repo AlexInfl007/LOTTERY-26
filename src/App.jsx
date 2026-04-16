@@ -120,13 +120,6 @@ export default function App() {
         // Get initial pool amount from contract
         await refreshLotteryData(walletAddress);
 
-        try {
-          await seedFeedFromChain();
-        } catch (feedError) {
-          console.warn("Unable to preload ticket feed:", feedError);
-          setFeed([]);
-        }
-        
         // Get recent winners from contract
         const recentWinners = await getRecentWinners();
         setWinners(recentWinners);
@@ -152,6 +145,10 @@ export default function App() {
           }
 
           refreshLotteryData(walletAddress).catch(() => {});
+        });
+
+        seedFeedFromChain().catch((feedError) => {
+          console.warn("Unable to preload ticket feed:", feedError);
         });
 
         unsubscribeWinnerRef.current = watchWinnerEvents && typeof watchWinnerEvents === 'function'
@@ -184,7 +181,6 @@ export default function App() {
     const updatePool = async () => {
       try {
         await refreshLotteryData(walletAddress);
-        await seedFeedFromChain();
       } catch (error) {
         console.error("Error updating prize pool:", error);
       }
@@ -237,7 +233,7 @@ export default function App() {
       
       if (result.success) {
         await refreshLotteryData(walletAddress);
-        await seedFeedFromChain();
+        seedFeedFromChain().catch(() => {});
       } else {
         console.error("Transaction failed:", result.error);
         alert(`Transaction failed: ${result.error}`);
