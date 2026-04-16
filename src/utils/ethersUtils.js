@@ -68,9 +68,8 @@ export async function watchTicketEvents(onTicketEvent) {
   const provider = await getCurrentProvider();
   const seenTx = new Set();
 
-  const handler = async (buyer) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const shortAddress = buyer ? `${buyer.slice(0, 6)}...${buyer.slice(-4)}` : 'Unknown';
+  const handler = async (buyer, round) => {
+    const timestamp = Date.now();
     let latestCount = null;
 
     try {
@@ -80,7 +79,9 @@ export async function watchTicketEvents(onTicketEvent) {
     }
 
     onTicketEvent({
-      message: `New ticket purchased • ${shortAddress} • ${timestamp}`,
+      buyer,
+      round: Number(round ?? 0),
+      timestamp,
       ticketsCount: typeof latestCount === 'number' ? latestCount : null
     });
   };
@@ -104,9 +105,10 @@ export async function watchTicketEvents(onTicketEvent) {
         if (seenTx.has(tx.hash)) continue;
 
         seenTx.add(tx.hash);
-        const shortAddress = tx?.from ? `${tx.from.slice(0, 6)}...${tx.from.slice(-4)}` : 'Unknown';
         onTicketEvent({
-          message: `New ticket purchased • ${shortAddress} • ${new Date().toLocaleTimeString()}`,
+          buyer: tx?.from || null,
+          round: null,
+          timestamp: Date.now(),
           ticketsCount: null
         });
       }
@@ -125,6 +127,54 @@ export async function watchTicketEvents(onTicketEvent) {
       provider.off('block', fallbackBlockHandler);
     }
   };
+}
+
+export async function getRecentTicketEvents(limit = 50) {
+  const provider = await getCurrentProvider();
+  const currentContract = await getCurrentContract();
+  if (!provider || !currentContract) return [];
+
+  const latestBlockNumber = await provider.getBlockNumber();
+  const EVENT_BATCH = 3000;
+  const events = [];
+
+  for (let endBlock = latestBlockNumber; endBlock >= 0; endBlock -= EVENT_BATCH) {
+    if (events.length >= limit) break;
+    const startBlock = Math.max(0, endBlock - EVENT_BATCH + 1);
+
+    let batch = [];
+    try {
+      batch = await currentContract.queryFilter('TicketBought', startBlock, endBlock);
+    } catch {
+      continue;
+    }
+
+    for (let i = batch.length - 1; i >= 0; i -= 1) {
+      if (events.length >= limit) break;
+      const ev = batch[i];
+      const buyer = ev?.args?.buyer || null;
+      const round = ev?.args?.round !== undefined ? Number(ev.args.round) : null;
+      const blockNumber = ev?.blockNumber;
+
+      let timestamp = Date.now();
+      if (typeof blockNumber === 'number') {
+        try {
+          const block = await provider.getBlock(blockNumber);
+          if (block?.timestamp) timestamp = Number(block.timestamp) * 1000;
+        } catch {
+          // keep fallback timestamp
+        }
+      }
+
+      events.push({
+        buyer,
+        round,
+        timestamp
+      });
+    }
+  }
+
+  return events;
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
