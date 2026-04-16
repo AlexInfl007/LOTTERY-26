@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import { getContractAsync, initializeContract, getContractWithSigner } from '../../utils/contractManager';
 import { getSharedProvider, setSharedProvider } from './providerStore';
-import { CONTRACT_ADDRESS } from './contract';
+import { CONTRACT_ABI, CONTRACT_ADDRESS } from './contract';
 
 export const SUPPORTS_TICKET_EVENTS = false;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
@@ -10,7 +10,29 @@ const PURCHASE_METHOD_SELECTORS = [
   '0x' + ethers.id('buyTicket()').slice(2, 10)
 ];
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
+const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const TICKET_PRICE_WEI = ethers.parseEther('30');
+const PUBLIC_RPC_URLS = [
+  'https://polygon-rpc.com',
+  'https://polygon-bor.publicnode.com',
+  'https://1rpc.io/matic'
+];
+let readOnlyProvider = null;
+
+function buildExplorerUrl(params = {}) {
+  const isBrowser = typeof window !== 'undefined' && window.location?.origin;
+  const base = isBrowser
+    ? new URL('/api/polygonscan', window.location.origin)
+    : new URL(POLYGONSCAN_TXLIST_ENDPOINT);
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      base.searchParams.set(key, String(value));
+    }
+  });
+
+  return base.toString();
+}
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
@@ -34,6 +56,39 @@ export async function getCurrentProvider() {
   }
 }
 
+function getReadOnlyProvider() {
+  if (typeof window !== 'undefined') {
+    // Browser RPC calls to public Polygon endpoints are often blocked by CORS.
+    // In browser we rely on wallet provider and/or explorer proxy fallbacks.
+    return null;
+  }
+
+  if (readOnlyProvider) return readOnlyProvider;
+
+  for (const rpcUrl of PUBLIC_RPC_URLS) {
+    try {
+      readOnlyProvider = new ethers.JsonRpcProvider(rpcUrl, 137, { staticNetwork: true });
+      return readOnlyProvider;
+    } catch {
+      // Try next RPC URL.
+    }
+  }
+
+  return null;
+}
+
+async function getReadProvider() {
+  const walletProvider = await getCurrentProvider();
+  if (walletProvider) return walletProvider;
+  return getReadOnlyProvider();
+}
+
+async function getReadContract() {
+  const provider = await getReadProvider();
+  if (!provider) return null;
+  return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+}
+
 export async function getCurrentContract() {
   const provider = await getCurrentProvider();
   if (!provider) return null;
@@ -47,14 +102,18 @@ export async function getCurrentContract() {
 }
 
 export async function readPrizePool() {
-  const currentContract = await getCurrentContract();
-  if (!currentContract) return null;
-
   try {
-    const raw = await currentContract.prizePool();
+    const [raw] = await callViaPolygonscan('prizePool', []);
     return Number(ethers.formatEther(raw || 0n));
   } catch {
-    return 0;
+    try {
+      const currentContract = await getReadContract();
+      if (!currentContract) return 0;
+      const raw = await currentContract.prizePool();
+      return Number(ethers.formatEther(raw || 0n));
+    } catch {
+      return 0;
+    }
   }
 }
 
@@ -63,14 +122,13 @@ export async function watchTicketEvents(onTicketEvent) {
     return () => {};
   }
 
-  const currentContract = await getCurrentContract();
-  if (!currentContract) return () => {};
-  const provider = await getCurrentProvider();
+  const currentContract = await getReadContract();
+  const provider = await getReadProvider();
   const seenTx = new Set();
+  const seenLogIds = new Set();
 
-  const handler = async (buyer) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const shortAddress = buyer ? `${buyer.slice(0, 6)}...${buyer.slice(-4)}` : 'Unknown';
+  const handler = async (buyer, round) => {
+    const timestamp = Date.now();
     let latestCount = null;
 
     try {
@@ -80,12 +138,16 @@ export async function watchTicketEvents(onTicketEvent) {
     }
 
     onTicketEvent({
-      message: `New ticket purchased • ${shortAddress} • ${timestamp}`,
+      buyer,
+      round: Number(round ?? 0),
+      timestamp,
       ticketsCount: typeof latestCount === 'number' ? latestCount : null
     });
   };
 
-  currentContract.on('TicketBought', handler);
+  if (currentContract) {
+    currentContract.on('TicketBought', handler);
+  }
 
   const fallbackBlockHandler = async (blockNumber) => {
     if (!provider) return;
@@ -104,9 +166,10 @@ export async function watchTicketEvents(onTicketEvent) {
         if (seenTx.has(tx.hash)) continue;
 
         seenTx.add(tx.hash);
-        const shortAddress = tx?.from ? `${tx.from.slice(0, 6)}...${tx.from.slice(-4)}` : 'Unknown';
         onTicketEvent({
-          message: `New ticket purchased • ${shortAddress} • ${new Date().toLocaleTimeString()}`,
+          buyer: tx?.from || null,
+          round: null,
+          timestamp: Date.now(),
           ticketsCount: null
         });
       }
@@ -119,20 +182,125 @@ export async function watchTicketEvents(onTicketEvent) {
     provider.on('block', fallbackBlockHandler);
   }
 
+  const pollInterval = setInterval(async () => {
+    try {
+      const recentEvents = await fetchTicketEventsFromPolygonscan(25);
+      const fallbackTransfers = recentEvents.length === 0
+        ? mapPurchasesToFeedEvents(await fetchPurchasesFromPolygonscan(25))
+        : [];
+      const combinedEvents = [...recentEvents, ...fallbackTransfers];
+      for (const eventItem of combinedEvents.reverse()) {
+        if (!eventItem?.id || seenLogIds.has(eventItem.id)) continue;
+        seenLogIds.add(eventItem.id);
+        onTicketEvent({
+          buyer: eventItem.buyer,
+          round: eventItem.round,
+          timestamp: eventItem.timestamp,
+          ticketsCount: null
+        });
+      }
+    } catch {
+      // Ignore explorer polling errors.
+    }
+  }, 12000);
+
   return () => {
-    currentContract.off('TicketBought', handler);
+    if (currentContract) {
+      currentContract.off('TicketBought', handler);
+    }
     if (provider) {
       provider.off('block', fallbackBlockHandler);
     }
+    clearInterval(pollInterval);
   };
 }
 
+export async function getRecentTicketEvents(limit = 50) {
+  try {
+    const explorerEvents = await fetchTicketEventsFromPolygonscan(limit);
+    if (explorerEvents.length > 0) {
+      return explorerEvents;
+    }
+
+    const transferEvents = mapPurchasesToFeedEvents(await fetchPurchasesFromPolygonscan(limit));
+    if (transferEvents.length > 0) {
+      return transferEvents;
+    }
+  } catch {
+    // Continue with RPC fallback.
+  }
+
+  const provider = await getReadProvider();
+  const currentContract = await getReadContract();
+  if (!provider || !currentContract) return [];
+
+  const latestBlockNumber = await provider.getBlockNumber();
+  const EVENT_BATCH = 3000;
+  const MAX_SCAN_BLOCKS = 250000;
+  const MIN_BLOCK = Math.max(0, latestBlockNumber - MAX_SCAN_BLOCKS);
+  let consecutiveFailures = 0;
+  const events = [];
+
+  for (let endBlock = latestBlockNumber; endBlock >= MIN_BLOCK; endBlock -= EVENT_BATCH) {
+    if (events.length >= limit) break;
+    const startBlock = Math.max(MIN_BLOCK, endBlock - EVENT_BATCH + 1);
+
+    let batch = [];
+    try {
+      batch = await currentContract.queryFilter('TicketBought', startBlock, endBlock);
+      consecutiveFailures = 0;
+    } catch {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= 5) {
+        break;
+      }
+      continue;
+    }
+
+    for (let i = batch.length - 1; i >= 0; i -= 1) {
+      if (events.length >= limit) break;
+      const ev = batch[i];
+      const buyer = ev?.args?.buyer || null;
+      const round = ev?.args?.round !== undefined ? Number(ev.args.round) : null;
+      const blockNumber = ev?.blockNumber;
+
+      let timestamp = Date.now();
+      if (typeof blockNumber === 'number') {
+        try {
+          const block = await provider.getBlock(blockNumber);
+          if (block?.timestamp) timestamp = Number(block.timestamp) * 1000;
+        } catch {
+          // keep fallback timestamp
+        }
+      }
+
+      events.push({
+        id: `${ev?.transactionHash || 'tx'}:${ev?.index ?? i}`,
+        buyer,
+        round,
+        timestamp
+      });
+    }
+  }
+
+  return events;
+}
+
+function mapPurchasesToFeedEvents(purchases = []) {
+  return purchases.map((purchase) => ({
+    id: purchase?.hash ? `${purchase.hash}:tx` : `purchase:${purchase?.blockNumber || Date.now()}`,
+    buyer: purchase?.from || null,
+    round: null,
+    timestamp: purchase?.timestamp || Date.now()
+  }));
+}
+
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
-  const provider = await getCurrentProvider();
+  const provider = await getReadProvider();
   if (!provider) return [];
 
   try {
-    const currentContract = await getCurrentContract();
+    const currentContract = await getReadContract();
     if (currentContract) {
       const quickEvents = await scanRecentTicketEventsQuick(currentContract, provider, limit);
       if (quickEvents.length > 0) return quickEvents.slice(0, limit);
@@ -293,17 +461,16 @@ async function fetchPurchasesFromPolygonscan(limit) {
   if (typeof window === 'undefined' || typeof fetch !== 'function') return [];
 
   try {
-    const url = new URL(POLYGONSCAN_TXLIST_ENDPOINT);
-    url.searchParams.set('module', 'account');
-    url.searchParams.set('action', 'txlist');
-    url.searchParams.set('address', CONTRACT_ADDRESS);
-    url.searchParams.set('startblock', '0');
-    url.searchParams.set('endblock', '99999999');
-    url.searchParams.set('page', '1');
-    url.searchParams.set('offset', String(Math.max(25, limit * 3)));
-    url.searchParams.set('sort', 'desc');
-
-    const response = await fetch(url.toString(), { method: 'GET' });
+    const response = await fetch(buildExplorerUrl({
+      module: 'account',
+      action: 'txlist',
+      address: CONTRACT_ADDRESS,
+      startblock: 0,
+      endblock: 99999999,
+      page: 1,
+      offset: Math.max(25, limit * 3),
+      sort: 'desc'
+    }), { method: 'GET' });
     if (!response.ok) return [];
 
     const payload = await response.json();
@@ -334,6 +501,51 @@ async function fetchPurchasesFromPolygonscan(limit) {
     }
 
     return purchases;
+  } catch {
+    return [];
+  }
+}
+
+async function fetchTicketEventsFromPolygonscan(limit = 50) {
+  if (typeof fetch !== 'function') return [];
+
+  try {
+    const response = await fetch(buildExplorerUrl({
+      module: 'logs',
+      action: 'getLogs',
+      fromBlock: 0,
+      toBlock: 'latest',
+      address: CONTRACT_ADDRESS,
+      topic0: TICKET_BOUGHT_TOPIC,
+      page: 1,
+      offset: Math.max(20, limit)
+    }), { method: 'GET' });
+    if (!response.ok) return [];
+
+    const payload = await response.json();
+    const logs = Array.isArray(payload?.result) ? payload.result : [];
+    if (!logs.length) return [];
+
+    return logs
+      .slice(-limit)
+      .reverse()
+      .map((log, index) => {
+        const buyerTopic = Array.isArray(log?.topics) ? log.topics[1] : null;
+        const roundTopic = Array.isArray(log?.topics) ? log.topics[2] : null;
+        const buyer = buyerTopic ? ethers.getAddress(`0x${buyerTopic.slice(-40)}`) : null;
+        const round = roundTopic ? Number(BigInt(roundTopic)) : null;
+        const rawTs = log?.timeStamp;
+        const ts = typeof rawTs === 'string'
+          ? (rawTs.startsWith('0x') ? parseInt(rawTs, 16) : Number(rawTs))
+          : NaN;
+
+        return {
+          id: `${log?.transactionHash || 'tx'}:${log?.logIndex ?? index}`,
+          buyer,
+          round,
+          timestamp: Number.isFinite(ts) ? ts * 1000 : Date.now()
+        };
+      });
   } catch {
     return [];
   }
@@ -420,7 +632,7 @@ function parseBlockTimestamp(timestamp) {
 }
 
 export async function watchWinnerEvents(onWinner) {
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return () => {};
 
   const handler = (winner, amount, round) => {
@@ -484,34 +696,66 @@ export async function buyTicket(signer) {
 }
 
 export async function getUserTickets(walletAddress) {
-  const currentContract = await getCurrentContract();
-  if (!currentContract) return 0;
-
   try {
-    const ticketCount = await currentContract.ticketsOf(walletAddress);
+    const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
     return Number(ticketCount || 0n);
   } catch {
-    return 0;
+    try {
+      const currentContract = await getReadContract();
+      if (!currentContract) return 0;
+      const ticketCount = await currentContract.ticketsOf(walletAddress);
+      return Number(ticketCount || 0n);
+    } catch {
+      return 0;
+    }
   }
 }
 
 export async function getTicketsCount() {
-  const currentContract = await getCurrentContract();
-  if (!currentContract) return null;
-
   try {
-    const raw = await currentContract.ticketsCount();
+    const [raw] = await callViaPolygonscan('ticketsCount', []);
     return Number(raw || 0n);
   } catch {
-    return 0;
+    try {
+      const currentContract = await getReadContract();
+      if (!currentContract) return 0;
+      const raw = await currentContract.ticketsCount();
+      return Number(raw || 0n);
+    } catch {
+      return 0;
+    }
   }
 }
 
+async function callViaPolygonscan(functionName, args) {
+  if (typeof fetch !== 'function') {
+    throw new Error('fetch unavailable');
+  }
+
+  const iface = new ethers.Interface(CONTRACT_ABI);
+  const data = iface.encodeFunctionData(functionName, args);
+  const response = await fetch(buildExplorerUrl({
+    module: 'proxy',
+    action: 'eth_call',
+    to: CONTRACT_ADDRESS,
+    data,
+    tag: 'latest'
+  }), { method: 'GET' });
+  if (!response.ok) throw new Error('Polygonscan eth_call failed');
+  const payload = await response.json();
+  const resultHex = payload?.result;
+  if (typeof resultHex !== 'string' || !resultHex.startsWith('0x')) {
+    throw new Error('Invalid Polygonscan eth_call response');
+  }
+
+  return iface.decodeFunctionResult(functionName, resultHex);
+}
+
 export async function getRecentWinners() {
-  const provider = await getCurrentProvider();
+  const provider = await getReadProvider();
   if (!provider) return null;
 
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return [];
 
   const latestBlockNumber = await provider.getBlockNumber();

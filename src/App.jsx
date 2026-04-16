@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider, getRecentTicketPurchases } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -30,28 +30,24 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
+  const MAX_FEED_ITEMS = 300;
 
-  const formatFeedFromPurchases = (purchases = []) => {
-    return purchases.map((purchase) => {
-      const timestamp = new Date(purchase.timestamp).toLocaleTimeString();
-      const shortAddress = formatShortAddress(purchase.from);
-      return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${timestamp}`;
+  const formatFeedFromEvents = (events = []) => {
+    return events.map((eventItem) => {
+      const timestamp = eventItem?.timestamp ? new Date(eventItem.timestamp).toLocaleTimeString() : "";
+      const shortAddress = formatShortAddress(eventItem?.buyer);
+      const roundLabel = Number.isFinite(eventItem?.round) ? `Round ${eventItem.round}` : "Round ?";
+
+      return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${roundLabel} • ${timestamp}`;
     });
   };
 
-  const seedFeedFromChain = async (ticketCountHint = null) => {
-    const recentPurchases = await getRecentTicketPurchases(15, 5000, ticketCountHint);
-    const formattedRecentFeed = formatFeedFromPurchases(recentPurchases);
+  const seedFeedFromChain = async () => {
+    const recentEvents = await getRecentTicketEvents(MAX_FEED_ITEMS);
+    const formattedRecentFeed = formatFeedFromEvents(recentEvents);
 
     if (formattedRecentFeed.length > 0) {
       setFeed(formattedRecentFeed);
-      return true;
-    }
-
-    if (typeof ticketCountHint === 'number' && ticketCountHint > 0) {
-      setFeed([
-        `${t('events.ticketPurchased', 'New ticket purchased')} #${ticketCountHint}`
-      ]);
       return true;
     }
 
@@ -60,6 +56,26 @@ export default function App() {
   const formatShortAddress = (address) => {
     if (!address || address.length < 10) return address || "";
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const refreshLotteryData = async (address = walletAddress) => {
+    const updatedPool = await readPrizePool();
+    if (typeof updatedPool === 'number') {
+      setPoolAmount(updatedPool);
+    }
+
+    const updatedTicketsCount = await getTicketsCount();
+    if (typeof updatedTicketsCount === 'number') {
+      setTicketsBought(updatedTicketsCount);
+      lastObservedTicketsRef.current = updatedTicketsCount;
+    }
+
+    if (address) {
+      const updatedUserTickets = await getUserTickets(address);
+      if (typeof updatedUserTickets === 'number') {
+        setMyTickets(updatedUserTickets);
+      }
+    }
   };
 
   useEffect(() => {
@@ -98,78 +114,23 @@ export default function App() {
     let mounted = true;
     
     const initializeData = async () => {
-      // Check if wallet is connected
-      const currentProvider = await getCurrentProvider();
-      if (!currentProvider) {
-        if (mounted) {
-          setPoolAmount(null);
-          setTicketsBought(null);
-          setWinners(null);
-          setMyTickets(0);
-          setFeed([]);
-          lastObservedTicketsRef.current = null;
-          setLoading(false);
-        }
-        return;
-      }
-      
       try {
-        // Wait for contract initialization (max 10 seconds with retries)
-        let attempts = 0;
-        let contractInitialized = false;
-        while (attempts < 20 && !contractInitialized) {
-          try {
-            await readPrizePool();
-            contractInitialized = true; // Mark as initialized if no error thrown
-          } catch (error) {
-            if (error.message && !error.message.includes('Contract not initialized') && 
-                !error.message.includes('No provider available') && 
-                !error.message.includes('No valid provider')) {
-              // If it's a different error, rethrow it
-              throw error;
-            }
-            await new Promise(resolve => {
-              const channel = new MessageChannel();
-              channel.port1.onmessage = () => resolve();
-              channel.port2.postMessage('');
-              channel.port1.close();
-              channel.port2.close();
-            });
-            attempts++;
-          }
-        }
-        
-        if (!contractInitialized) {
-          console.error("Contract failed to initialize after multiple attempts");
-          throw new Error("Contract failed to initialize");
-        }
-        
         if (!mounted) return;
         
         // Get initial pool amount from contract
-        const initialPool = await readPrizePool();
-        setPoolAmount(initialPool);
-        
-        // Get initial tickets count from contract
-        const initialTicketsCount = await getTicketsCount();
-        setTicketsBought(initialTicketsCount);
-        lastObservedTicketsRef.current = typeof initialTicketsCount === 'number' ? initialTicketsCount : 0;
+        await refreshLotteryData(walletAddress);
 
-        try {
-          await seedFeedFromChain(initialTicketsCount);
-        } catch (feedError) {
-          console.warn("Unable to preload ticket feed:", feedError);
-          setFeed([]);
-        }
-        
         // Get recent winners from contract
         const recentWinners = await getRecentWinners();
         setWinners(recentWinners);
         
         unsubscribeTicketRef.current = await watchTicketEvents((ticketEvent) => {
-          const nextMessage = typeof ticketEvent === 'string' ? ticketEvent : ticketEvent?.message;
+          const shortAddress = formatShortAddress(ticketEvent?.buyer);
+          const round = Number.isFinite(ticketEvent?.round) ? ticketEvent.round : "?";
+          const timestamp = ticketEvent?.timestamp ? new Date(ticketEvent.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+          const nextMessage = `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • Round ${round} • ${timestamp}`;
           if (nextMessage) {
-            setFeed(prev => [nextMessage, ...prev].slice(0,15));
+            setFeed(prev => [nextMessage, ...prev].slice(0, MAX_FEED_ITEMS));
           }
 
           if (typeof ticketEvent?.ticketsCount === 'number') {
@@ -178,6 +139,16 @@ export default function App() {
           } else {
             setTicketsBought(t => (typeof t === 'number' ? t + 1 : 1));
           }
+
+          if (walletAddress && ticketEvent?.buyer && walletAddress.toLowerCase() === ticketEvent.buyer.toLowerCase()) {
+            setMyTickets((count) => count + 1);
+          }
+
+          refreshLotteryData(walletAddress).catch(() => {});
+        });
+
+        seedFeedFromChain().catch((feedError) => {
+          console.warn("Unable to preload ticket feed:", feedError);
         });
 
         unsubscribeWinnerRef.current = watchWinnerEvents && typeof watchWinnerEvents === 'function'
@@ -201,50 +172,15 @@ export default function App() {
       unsubscribeTicketRef.current();
       unsubscribeWinnerRef.current();
     };
-  }, [walletAddress]);
+  }, [walletAddress, t]);
 
   // Periodically update the prize pool to reflect new contributions when wallet is connected
   useEffect(() => {
     let intervalId;
     
     const updatePool = async () => {
-      // Check if wallet is connected before attempting to update
-      const currentProvider = await getCurrentProvider();
-      if (!currentProvider) {
-        // Skip update if no wallet connected
-        return;
-      }
-      
       try {
-        const updatedPool = await readPrizePool();
-        setPoolAmount(updatedPool);
-
-        const updatedTicketsCount = await getTicketsCount();
-        if (typeof updatedTicketsCount === 'number') {
-          setTicketsBought(updatedTicketsCount);
-
-          try {
-            const wasSeeded = await seedFeedFromChain(updatedTicketsCount);
-            if (!wasSeeded && typeof updatedTicketsCount === 'number' && updatedTicketsCount > 0) {
-              const timestamp = new Date().toLocaleTimeString();
-              setFeed((previousFeed) => [
-                `${t('events.ticketPurchased', 'New ticket purchased')} #${updatedTicketsCount} • ${timestamp}`,
-                ...previousFeed
-              ].slice(0, 15));
-            }
-          } catch {
-            // Keep the latest available feed if refresh fails.
-          }
-
-          lastObservedTicketsRef.current = updatedTicketsCount;
-        }
-
-        if (walletAddress) {
-          const updatedUserTickets = await getUserTickets(walletAddress);
-          if (typeof updatedUserTickets === 'number') {
-            setMyTickets(updatedUserTickets);
-          }
-        }
+        await refreshLotteryData(walletAddress);
       } catch (error) {
         console.error("Error updating prize pool:", error);
       }
@@ -296,10 +232,8 @@ export default function App() {
       const result = await buyTicket(signer);
       
       if (result.success) {
-        // Update local state after successful transaction
-        setMyTickets(t => t + 1);
-        // Don't update tickets/pool immediately - wait for the blockchain event
-        // The event listener will update these values when the transaction is confirmed
+        await refreshLotteryData(walletAddress);
+        seedFeedFromChain().catch(() => {});
       } else {
         console.error("Transaction failed:", result.error);
         alert(`Transaction failed: ${result.error}`);
