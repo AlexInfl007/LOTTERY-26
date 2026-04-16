@@ -57,6 +57,12 @@ export async function getCurrentProvider() {
 }
 
 function getReadOnlyProvider() {
+  if (typeof window !== 'undefined') {
+    // Browser RPC calls to public Polygon endpoints are often blocked by CORS.
+    // In browser we rely on wallet provider and/or explorer proxy fallbacks.
+    return null;
+  }
+
   if (readOnlyProvider) return readOnlyProvider;
 
   for (const rpcUrl of PUBLIC_RPC_URLS) {
@@ -117,7 +123,6 @@ export async function watchTicketEvents(onTicketEvent) {
   }
 
   const currentContract = await getReadContract();
-  if (!currentContract) return () => {};
   const provider = await getReadProvider();
   const seenTx = new Set();
   const seenLogIds = new Set();
@@ -140,7 +145,9 @@ export async function watchTicketEvents(onTicketEvent) {
     });
   };
 
-  currentContract.on('TicketBought', handler);
+  if (currentContract) {
+    currentContract.on('TicketBought', handler);
+  }
 
   const fallbackBlockHandler = async (blockNumber) => {
     if (!provider) return;
@@ -198,7 +205,9 @@ export async function watchTicketEvents(onTicketEvent) {
   }, 12000);
 
   return () => {
-    currentContract.off('TicketBought', handler);
+    if (currentContract) {
+      currentContract.off('TicketBought', handler);
+    }
     if (provider) {
       provider.off('block', fallbackBlockHandler);
     }
