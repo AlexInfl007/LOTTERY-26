@@ -10,6 +10,7 @@ const PURCHASE_METHOD_SELECTORS = [
   '0x' + ethers.id('buyTicket()').slice(2, 10)
 ];
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
+const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const TICKET_PRICE_WEI = ethers.parseEther('30');
 const PUBLIC_RPC_URLS = [
   'https://polygon-rpc.com',
@@ -87,7 +88,12 @@ export async function readPrizePool() {
     const raw = await currentContract.prizePool();
     return Number(ethers.formatEther(raw || 0n));
   } catch {
-    return 0;
+    try {
+      const [raw] = await callViaPolygonscan('prizePool', []);
+      return Number(ethers.formatEther(raw || 0n));
+    } catch {
+      return 0;
+    }
   }
 }
 
@@ -100,6 +106,7 @@ export async function watchTicketEvents(onTicketEvent) {
   if (!currentContract) return () => {};
   const provider = await getReadProvider();
   const seenTx = new Set();
+  const seenLogIds = new Set();
 
   const handler = async (buyer, round) => {
     const timestamp = Date.now();
@@ -154,11 +161,30 @@ export async function watchTicketEvents(onTicketEvent) {
     provider.on('block', fallbackBlockHandler);
   }
 
+  const pollInterval = setInterval(async () => {
+    try {
+      const recentEvents = await fetchTicketEventsFromPolygonscan(25);
+      for (const eventItem of recentEvents.reverse()) {
+        if (!eventItem?.id || seenLogIds.has(eventItem.id)) continue;
+        seenLogIds.add(eventItem.id);
+        onTicketEvent({
+          buyer: eventItem.buyer,
+          round: eventItem.round,
+          timestamp: eventItem.timestamp,
+          ticketsCount: null
+        });
+      }
+    } catch {
+      // Ignore explorer polling errors.
+    }
+  }, 12000);
+
   return () => {
     currentContract.off('TicketBought', handler);
     if (provider) {
       provider.off('block', fallbackBlockHandler);
     }
+    clearInterval(pollInterval);
   };
 }
 
@@ -208,6 +234,7 @@ export async function getRecentTicketEvents(limit = 50) {
       }
 
       events.push({
+        id: `${ev?.transactionHash || 'tx'}:${ev?.index ?? i}`,
         buyer,
         round,
         timestamp
@@ -215,7 +242,8 @@ export async function getRecentTicketEvents(limit = 50) {
     }
   }
 
-  return events;
+  if (events.length > 0) return events;
+  return fetchTicketEventsFromPolygonscan(limit);
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
@@ -430,6 +458,52 @@ async function fetchPurchasesFromPolygonscan(limit) {
   }
 }
 
+async function fetchTicketEventsFromPolygonscan(limit = 50) {
+  if (typeof fetch !== 'function') return [];
+
+  try {
+    const url = new URL(POLYGONSCAN_TXLIST_ENDPOINT);
+    url.searchParams.set('module', 'logs');
+    url.searchParams.set('action', 'getLogs');
+    url.searchParams.set('fromBlock', '0');
+    url.searchParams.set('toBlock', 'latest');
+    url.searchParams.set('address', CONTRACT_ADDRESS);
+    url.searchParams.set('topic0', TICKET_BOUGHT_TOPIC);
+    url.searchParams.set('page', '1');
+    url.searchParams.set('offset', String(Math.max(20, limit)));
+
+    const response = await fetch(url.toString(), { method: 'GET' });
+    if (!response.ok) return [];
+
+    const payload = await response.json();
+    const logs = Array.isArray(payload?.result) ? payload.result : [];
+    if (!logs.length) return [];
+
+    return logs
+      .slice(-limit)
+      .reverse()
+      .map((log, index) => {
+        const buyerTopic = Array.isArray(log?.topics) ? log.topics[1] : null;
+        const roundTopic = Array.isArray(log?.topics) ? log.topics[2] : null;
+        const buyer = buyerTopic ? ethers.getAddress(`0x${buyerTopic.slice(-40)}`) : null;
+        const round = roundTopic ? Number(BigInt(roundTopic)) : null;
+        const rawTs = log?.timeStamp;
+        const ts = typeof rawTs === 'string'
+          ? (rawTs.startsWith('0x') ? parseInt(rawTs, 16) : Number(rawTs))
+          : NaN;
+
+        return {
+          id: `${log?.transactionHash || 'tx'}:${log?.logIndex ?? index}`,
+          buyer,
+          round,
+          timestamp: Number.isFinite(ts) ? ts * 1000 : Date.now()
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
 function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
   const MIN_SCAN_BLOCKS = 25000;
   const MAX_SCAN_BLOCKS = 180000;
@@ -582,7 +656,12 @@ export async function getUserTickets(walletAddress) {
     const ticketCount = await currentContract.ticketsOf(walletAddress);
     return Number(ticketCount || 0n);
   } catch {
-    return 0;
+    try {
+      const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
+      return Number(ticketCount || 0n);
+    } catch {
+      return 0;
+    }
   }
 }
 
@@ -594,8 +673,38 @@ export async function getTicketsCount() {
     const raw = await currentContract.ticketsCount();
     return Number(raw || 0n);
   } catch {
-    return 0;
+    try {
+      const [raw] = await callViaPolygonscan('ticketsCount', []);
+      return Number(raw || 0n);
+    } catch {
+      return 0;
+    }
   }
+}
+
+async function callViaPolygonscan(functionName, args) {
+  if (typeof fetch !== 'function') {
+    throw new Error('fetch unavailable');
+  }
+
+  const iface = new ethers.Interface(CONTRACT_ABI);
+  const data = iface.encodeFunctionData(functionName, args);
+  const url = new URL(POLYGONSCAN_TXLIST_ENDPOINT);
+  url.searchParams.set('module', 'proxy');
+  url.searchParams.set('action', 'eth_call');
+  url.searchParams.set('to', CONTRACT_ADDRESS);
+  url.searchParams.set('data', data);
+  url.searchParams.set('tag', 'latest');
+
+  const response = await fetch(url.toString(), { method: 'GET' });
+  if (!response.ok) throw new Error('Polygonscan eth_call failed');
+  const payload = await response.json();
+  const resultHex = payload?.result;
+  if (typeof resultHex !== 'string' || !resultHex.startsWith('0x')) {
+    throw new Error('Invalid Polygonscan eth_call response');
+  }
+
+  return iface.decodeFunctionResult(functionName, resultHex);
 }
 
 export async function getRecentWinners() {
