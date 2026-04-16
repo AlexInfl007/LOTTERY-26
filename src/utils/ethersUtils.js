@@ -96,15 +96,14 @@ export async function getCurrentContract() {
 }
 
 export async function readPrizePool() {
-  const currentContract = await getReadContract();
-  if (!currentContract) return null;
-
   try {
-    const raw = await currentContract.prizePool();
+    const [raw] = await callViaPolygonscan('prizePool', []);
     return Number(ethers.formatEther(raw || 0n));
   } catch {
     try {
-      const [raw] = await callViaPolygonscan('prizePool', []);
+      const currentContract = await getReadContract();
+      if (!currentContract) return 0;
+      const raw = await currentContract.prizePool();
       return Number(ethers.formatEther(raw || 0n));
     } catch {
       return 0;
@@ -204,6 +203,15 @@ export async function watchTicketEvents(onTicketEvent) {
 }
 
 export async function getRecentTicketEvents(limit = 50) {
+  try {
+    const explorerEvents = await fetchTicketEventsFromPolygonscan(limit);
+    if (explorerEvents.length > 0) {
+      return explorerEvents;
+    }
+  } catch {
+    // Continue with RPC fallback.
+  }
+
   const provider = await getReadProvider();
   const currentContract = await getReadContract();
   if (!provider || !currentContract) return [];
@@ -257,8 +265,7 @@ export async function getRecentTicketEvents(limit = 50) {
     }
   }
 
-  if (events.length > 0) return events;
-  return fetchTicketEventsFromPolygonscan(limit);
+  return events;
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
@@ -662,15 +669,14 @@ export async function buyTicket(signer) {
 }
 
 export async function getUserTickets(walletAddress) {
-  const currentContract = await getReadContract();
-  if (!currentContract) return 0;
-
   try {
-    const ticketCount = await currentContract.ticketsOf(walletAddress);
+    const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
     return Number(ticketCount || 0n);
   } catch {
     try {
-      const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
+      const currentContract = await getReadContract();
+      if (!currentContract) return 0;
+      const ticketCount = await currentContract.ticketsOf(walletAddress);
       return Number(ticketCount || 0n);
     } catch {
       return 0;
@@ -679,15 +685,14 @@ export async function getUserTickets(walletAddress) {
 }
 
 export async function getTicketsCount() {
-  const currentContract = await getReadContract();
-  if (!currentContract) return null;
-
   try {
-    const raw = await currentContract.ticketsCount();
+    const [raw] = await callViaPolygonscan('ticketsCount', []);
     return Number(raw || 0n);
   } catch {
     try {
-      const [raw] = await callViaPolygonscan('ticketsCount', []);
+      const currentContract = await getReadContract();
+      if (!currentContract) return 0;
+      const raw = await currentContract.ticketsCount();
       return Number(raw || 0n);
     } catch {
       return 0;
