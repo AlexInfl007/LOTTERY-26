@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import { getContractAsync, initializeContract, getContractWithSigner } from '../../utils/contractManager';
 import { getSharedProvider, setSharedProvider } from './providerStore';
-import { CONTRACT_ADDRESS } from './contract';
+import { CONTRACT_ABI, CONTRACT_ADDRESS } from './contract';
 
 export const SUPPORTS_TICKET_EVENTS = false;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
@@ -11,6 +11,12 @@ const PURCHASE_METHOD_SELECTORS = [
 ];
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
 const TICKET_PRICE_WEI = ethers.parseEther('30');
+const PUBLIC_RPC_URLS = [
+  'https://polygon-rpc.com',
+  'https://polygon-bor.publicnode.com',
+  'https://1rpc.io/matic'
+];
+let readOnlyProvider = null;
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
@@ -34,6 +40,33 @@ export async function getCurrentProvider() {
   }
 }
 
+function getReadOnlyProvider() {
+  if (readOnlyProvider) return readOnlyProvider;
+
+  for (const rpcUrl of PUBLIC_RPC_URLS) {
+    try {
+      readOnlyProvider = new ethers.JsonRpcProvider(rpcUrl, 137, { staticNetwork: true });
+      return readOnlyProvider;
+    } catch {
+      // Try next RPC URL.
+    }
+  }
+
+  return null;
+}
+
+async function getReadProvider() {
+  const walletProvider = await getCurrentProvider();
+  if (walletProvider) return walletProvider;
+  return getReadOnlyProvider();
+}
+
+async function getReadContract() {
+  const provider = await getReadProvider();
+  if (!provider) return null;
+  return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+}
+
 export async function getCurrentContract() {
   const provider = await getCurrentProvider();
   if (!provider) return null;
@@ -47,7 +80,7 @@ export async function getCurrentContract() {
 }
 
 export async function readPrizePool() {
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return null;
 
   try {
@@ -63,9 +96,9 @@ export async function watchTicketEvents(onTicketEvent) {
     return () => {};
   }
 
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return () => {};
-  const provider = await getCurrentProvider();
+  const provider = await getReadProvider();
   const seenTx = new Set();
 
   const handler = async (buyer, round) => {
@@ -130,8 +163,8 @@ export async function watchTicketEvents(onTicketEvent) {
 }
 
 export async function getRecentTicketEvents(limit = 50) {
-  const provider = await getCurrentProvider();
-  const currentContract = await getCurrentContract();
+  const provider = await getReadProvider();
+  const currentContract = await getReadContract();
   if (!provider || !currentContract) return [];
 
   const latestBlockNumber = await provider.getBlockNumber();
@@ -178,11 +211,11 @@ export async function getRecentTicketEvents(limit = 50) {
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
-  const provider = await getCurrentProvider();
+  const provider = await getReadProvider();
   if (!provider) return [];
 
   try {
-    const currentContract = await getCurrentContract();
+    const currentContract = await getReadContract();
     if (currentContract) {
       const quickEvents = await scanRecentTicketEventsQuick(currentContract, provider, limit);
       if (quickEvents.length > 0) return quickEvents.slice(0, limit);
@@ -470,7 +503,7 @@ function parseBlockTimestamp(timestamp) {
 }
 
 export async function watchWinnerEvents(onWinner) {
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return () => {};
 
   const handler = (winner, amount, round) => {
@@ -534,7 +567,7 @@ export async function buyTicket(signer) {
 }
 
 export async function getUserTickets(walletAddress) {
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return 0;
 
   try {
@@ -546,7 +579,7 @@ export async function getUserTickets(walletAddress) {
 }
 
 export async function getTicketsCount() {
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return null;
 
   try {
@@ -558,10 +591,10 @@ export async function getTicketsCount() {
 }
 
 export async function getRecentWinners() {
-  const provider = await getCurrentProvider();
+  const provider = await getReadProvider();
   if (!provider) return null;
 
-  const currentContract = await getCurrentContract();
+  const currentContract = await getReadContract();
   if (!currentContract) return [];
 
   const latestBlockNumber = await provider.getBlockNumber();

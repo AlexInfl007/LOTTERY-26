@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getCurrentProvider, getRecentTicketEvents } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -30,6 +30,7 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
+  const MAX_FEED_ITEMS = 300;
 
   const formatFeedFromEvents = (events = []) => {
     return events.map((eventItem) => {
@@ -42,7 +43,7 @@ export default function App() {
   };
 
   const seedFeedFromChain = async () => {
-    const recentEvents = await getRecentTicketEvents(50);
+    const recentEvents = await getRecentTicketEvents(MAX_FEED_ITEMS);
     const formattedRecentFeed = formatFeedFromEvents(recentEvents);
 
     if (formattedRecentFeed.length > 0) {
@@ -113,52 +114,7 @@ export default function App() {
     let mounted = true;
     
     const initializeData = async () => {
-      // Check if wallet is connected
-      const currentProvider = await getCurrentProvider();
-      if (!currentProvider) {
-        if (mounted) {
-          setPoolAmount(null);
-          setTicketsBought(null);
-          setWinners(null);
-          setMyTickets(0);
-          setFeed([]);
-          lastObservedTicketsRef.current = null;
-          setLoading(false);
-        }
-        return;
-      }
-      
       try {
-        // Wait for contract initialization (max 10 seconds with retries)
-        let attempts = 0;
-        let contractInitialized = false;
-        while (attempts < 20 && !contractInitialized) {
-          try {
-            await readPrizePool();
-            contractInitialized = true; // Mark as initialized if no error thrown
-          } catch (error) {
-            if (error.message && !error.message.includes('Contract not initialized') && 
-                !error.message.includes('No provider available') && 
-                !error.message.includes('No valid provider')) {
-              // If it's a different error, rethrow it
-              throw error;
-            }
-            await new Promise(resolve => {
-              const channel = new MessageChannel();
-              channel.port1.onmessage = () => resolve();
-              channel.port2.postMessage('');
-              channel.port1.close();
-              channel.port2.close();
-            });
-            attempts++;
-          }
-        }
-        
-        if (!contractInitialized) {
-          console.error("Contract failed to initialize after multiple attempts");
-          throw new Error("Contract failed to initialize");
-        }
-        
         if (!mounted) return;
         
         // Get initial pool amount from contract
@@ -181,7 +137,7 @@ export default function App() {
           const timestamp = ticketEvent?.timestamp ? new Date(ticketEvent.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
           const nextMessage = `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • Round ${round} • ${timestamp}`;
           if (nextMessage) {
-            setFeed(prev => [nextMessage, ...prev].slice(0,15));
+            setFeed(prev => [nextMessage, ...prev].slice(0, MAX_FEED_ITEMS));
           }
 
           if (typeof ticketEvent?.ticketsCount === 'number') {
@@ -219,20 +175,13 @@ export default function App() {
       unsubscribeTicketRef.current();
       unsubscribeWinnerRef.current();
     };
-  }, [walletAddress]);
+  }, [walletAddress, t]);
 
   // Periodically update the prize pool to reflect new contributions when wallet is connected
   useEffect(() => {
     let intervalId;
     
     const updatePool = async () => {
-      // Check if wallet is connected before attempting to update
-      const currentProvider = await getCurrentProvider();
-      if (!currentProvider) {
-        // Skip update if no wallet connected
-        return;
-      }
-      
       try {
         await refreshLotteryData(walletAddress);
         await seedFeedFromChain();
