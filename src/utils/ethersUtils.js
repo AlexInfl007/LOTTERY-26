@@ -178,7 +178,11 @@ export async function watchTicketEvents(onTicketEvent) {
   const pollInterval = setInterval(async () => {
     try {
       const recentEvents = await fetchTicketEventsFromPolygonscan(25);
-      for (const eventItem of recentEvents.reverse()) {
+      const fallbackTransfers = recentEvents.length === 0
+        ? mapPurchasesToFeedEvents(await fetchPurchasesFromPolygonscan(25))
+        : [];
+      const combinedEvents = [...recentEvents, ...fallbackTransfers];
+      for (const eventItem of combinedEvents.reverse()) {
         if (!eventItem?.id || seenLogIds.has(eventItem.id)) continue;
         seenLogIds.add(eventItem.id);
         onTicketEvent({
@@ -207,6 +211,11 @@ export async function getRecentTicketEvents(limit = 50) {
     const explorerEvents = await fetchTicketEventsFromPolygonscan(limit);
     if (explorerEvents.length > 0) {
       return explorerEvents;
+    }
+
+    const transferEvents = mapPurchasesToFeedEvents(await fetchPurchasesFromPolygonscan(limit));
+    if (transferEvents.length > 0) {
+      return transferEvents;
     }
   } catch {
     // Continue with RPC fallback.
@@ -266,6 +275,15 @@ export async function getRecentTicketEvents(limit = 50) {
   }
 
   return events;
+}
+
+function mapPurchasesToFeedEvents(purchases = []) {
+  return purchases.map((purchase) => ({
+    id: purchase?.hash ? `${purchase.hash}:tx` : `purchase:${purchase?.blockNumber || Date.now()}`,
+    buyer: purchase?.from || null,
+    round: null,
+    timestamp: purchase?.timestamp || Date.now()
+  }));
 }
 
 export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000, totalTickets = null) {
