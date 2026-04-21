@@ -20,6 +20,12 @@ const PUBLIC_RPC_URLS = [
   'https://1rpc.io/matic'
 ];
 let readOnlyProvider = null;
+let deploymentBlockCache = null;
+let ticketHistoryCache = {
+  updatedAt: 0,
+  total: null,
+  perUser: new Map()
+};
 
 function buildExplorerUrl(params = {}) {
   const isBrowser = typeof window !== 'undefined' && window.location?.origin;
@@ -234,7 +240,9 @@ export async function getRecentTicketEvents(limit = 50) {
 
   const provider = await getReadProvider();
   const currentContract = await getReadContract();
-  if (!provider || !currentContract) return [];
+  if (!provider || !currentContract) {
+    return mapPurchasesToFeedEvents(await getRecentTicketPurchases(limit, 120000, null)).slice(0, limit);
+  }
 
   const latestBlockNumber = await provider.getBlockNumber();
   const EVENT_BATCH = 3000;
@@ -285,7 +293,9 @@ export async function getRecentTicketEvents(limit = 50) {
     }
   }
 
-  return events;
+  if (events.length > 0) return events;
+
+  return mapPurchasesToFeedEvents(await getRecentTicketPurchases(limit, 120000, null)).slice(0, limit);
 }
 
 function mapPurchasesToFeedEvents(purchases = []) {
@@ -692,6 +702,95 @@ function parseBlockTimestamp(timestamp) {
   return Number(timestamp);
 }
 
+async function resolveDeploymentBlock(provider) {
+  if (Number.isFinite(deploymentBlockCache)) {
+    return deploymentBlockCache;
+  }
+
+  try {
+    const latest = await provider.getBlockNumber();
+    const latestCode = await provider.getCode(CONTRACT_ADDRESS, latest);
+    if (!latestCode || latestCode === '0x') {
+      return Math.max(0, latest - 2000000);
+    }
+
+    let lo = 0;
+    let hi = latest;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const code = await provider.getCode(CONTRACT_ADDRESS, mid);
+      if (code && code !== '0x') {
+        hi = mid;
+      } else {
+        lo = mid + 1;
+      }
+    }
+
+    deploymentBlockCache = lo;
+    return lo;
+  } catch {
+    const latest = await provider.getBlockNumber();
+    return Math.max(0, latest - 2000000);
+  }
+}
+
+async function rebuildTicketHistoryFromLogs() {
+  const provider = await getReadProvider();
+  if (!provider) {
+    return { total: null, perUser: new Map() };
+  }
+
+  const latest = await provider.getBlockNumber();
+  const fromBlock = await resolveDeploymentBlock(provider);
+  const batchSize = 50000;
+  let total = 0;
+  const perUser = new Map();
+
+  for (let start = fromBlock; start <= latest; start += batchSize) {
+    const end = Math.min(latest, start + batchSize - 1);
+    let logs = [];
+
+    try {
+      logs = await provider.getLogs({
+        address: CONTRACT_ADDRESS,
+        fromBlock: start,
+        toBlock: end,
+        topics: [TICKET_BOUGHT_TOPIC]
+      });
+    } catch {
+      continue;
+    }
+
+    total += logs.length;
+
+    for (const log of logs) {
+      const buyerTopic = Array.isArray(log?.topics) ? log.topics[1] : null;
+      if (!buyerTopic) continue;
+
+      try {
+        const buyer = ethers.getAddress(`0x${buyerTopic.slice(-40)}`).toLowerCase();
+        perUser.set(buyer, (perUser.get(buyer) || 0) + 1);
+      } catch {
+        // Ignore malformed logs.
+      }
+    }
+  }
+
+  ticketHistoryCache = {
+    updatedAt: Date.now(),
+    total,
+    perUser
+  };
+
+  return ticketHistoryCache;
+}
+
+async function getTicketHistoryFromLogs(maxAgeMs = 180000) {
+  const isFresh = ticketHistoryCache.total !== null && (Date.now() - ticketHistoryCache.updatedAt) < maxAgeMs;
+  if (isFresh) return ticketHistoryCache;
+  return rebuildTicketHistoryFromLogs();
+}
+
 export async function watchWinnerEvents(onWinner) {
   const currentContract = await getReadContract();
   if (!currentContract) return () => {};
@@ -785,6 +884,16 @@ export async function getUserTickets(walletAddress) {
   if (!normalizedAddress) return 0;
 
   try {
+    const history = await getTicketHistoryFromLogs();
+    const fromLogs = history?.perUser?.get?.(normalizedAddress);
+    if (Number.isFinite(fromLogs)) {
+      return fromLogs;
+    }
+  } catch {
+    // Continue to explorer fallback.
+  }
+
+  try {
     const purchases = await fetchAllTicketPurchasesFromPolygonscan();
     return purchases.reduce((count, purchase) => (
       purchase?.from && purchase.from.toLowerCase() === normalizedAddress ? count + 1 : count
@@ -813,6 +922,15 @@ export async function getTicketsCount() {
       if (Number.isFinite(directValue) && directValue > 0) {
         return directValue;
       }
+    }
+  } catch {
+    // Continue to explorer fallback.
+  }
+
+  try {
+    const history = await getTicketHistoryFromLogs();
+    if (Number.isFinite(history?.total)) {
+      return history.total;
     }
   } catch {
     // Continue to explorer fallback.

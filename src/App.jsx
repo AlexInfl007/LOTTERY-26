@@ -38,7 +38,7 @@ export default function App() {
       const shortAddress = formatShortAddress(eventItem?.buyer);
       const roundLabel = Number.isFinite(eventItem?.round) ? `Round ${eventItem.round}` : "Round ?";
 
-      return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${roundLabel} • ${timestamp}`;
+      return `${t('events.ticketPurchased', 'New ticket purchased')} (30 POL) • ${shortAddress} • ${roundLabel} • ${timestamp}`;
     });
   };
 
@@ -128,7 +128,7 @@ export default function App() {
           const shortAddress = formatShortAddress(ticketEvent?.buyer);
           const round = Number.isFinite(ticketEvent?.round) ? ticketEvent.round : "?";
           const timestamp = ticketEvent?.timestamp ? new Date(ticketEvent.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-          const nextMessage = `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • Round ${round} • ${timestamp}`;
+          const nextMessage = `${t('events.ticketPurchased', 'New ticket purchased')} (30 POL) • ${shortAddress} • Round ${round} • ${timestamp}`;
           if (nextMessage) {
             setFeed(prev => [nextMessage, ...prev].slice(0, MAX_FEED_ITEMS));
           }
