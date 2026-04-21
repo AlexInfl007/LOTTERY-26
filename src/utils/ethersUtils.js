@@ -12,12 +12,20 @@ const PURCHASE_METHOD_SELECTORS = [
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
 const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const TICKET_PRICE_WEI = ethers.parseEther('30');
+const POLYGONSCAN_PAGE_SIZE = 1000;
+const POLYGONSCAN_MAX_PAGES = 30;
 const PUBLIC_RPC_URLS = [
   'https://polygon-rpc.com',
   'https://polygon-bor.publicnode.com',
   'https://1rpc.io/matic'
 ];
 let readOnlyProvider = null;
+let deploymentBlockCache = null;
+let ticketHistoryCache = {
+  updatedAt: 0,
+  total: null,
+  perUser: new Map()
+};
 
 function buildExplorerUrl(params = {}) {
   const isBrowser = typeof window !== 'undefined' && window.location?.origin;
@@ -34,12 +42,45 @@ function buildExplorerUrl(params = {}) {
   return base.toString();
 }
 
+function buildTicketStatsUrl(params = {}) {
+  const isBrowser = typeof window !== 'undefined' && window.location?.origin;
+  const base = isBrowser
+    ? new URL('/api/ticket-stats', window.location.origin)
+    : null;
+
+  if (!base) return null;
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      base.searchParams.set(key, String(value));
+    }
+  });
+
+  return base.toString();
+}
+
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
 }
 
 export function updateContractInstance(newProvider) {
   setSharedProvider(newProvider);
+}
+
+export async function fetchTicketStatsSnapshot(address = null, limit = 50) {
+  if (typeof fetch !== 'function') return null;
+  const url = buildTicketStatsUrl({ address, limit });
+  if (!url) return null;
+
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    if (!payload || typeof payload !== 'object') return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export async function getCurrentProvider() {
@@ -232,7 +273,9 @@ export async function getRecentTicketEvents(limit = 50) {
 
   const provider = await getReadProvider();
   const currentContract = await getReadContract();
-  if (!provider || !currentContract) return [];
+  if (!provider || !currentContract) {
+    return mapPurchasesToFeedEvents(await getRecentTicketPurchases(limit, 120000, null)).slice(0, limit);
+  }
 
   const latestBlockNumber = await provider.getBlockNumber();
   const EVENT_BATCH = 3000;
@@ -283,7 +326,9 @@ export async function getRecentTicketEvents(limit = 50) {
     }
   }
 
-  return events;
+  if (events.length > 0) return events;
+
+  return mapPurchasesToFeedEvents(await getRecentTicketPurchases(limit, 120000, null)).slice(0, limit);
 }
 
 function mapPurchasesToFeedEvents(purchases = []) {
@@ -506,6 +551,65 @@ async function fetchPurchasesFromPolygonscan(limit) {
   }
 }
 
+async function fetchAllTicketPurchasesFromPolygonscan() {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return [];
+
+  const purchases = [];
+  const seenHashes = new Set();
+
+  for (let page = 1; page <= POLYGONSCAN_MAX_PAGES; page += 1) {
+    try {
+      const response = await fetch(buildExplorerUrl({
+        module: 'account',
+        action: 'txlist',
+        address: CONTRACT_ADDRESS,
+        startblock: 0,
+        endblock: 99999999,
+        page,
+        offset: POLYGONSCAN_PAGE_SIZE,
+        sort: 'asc'
+      }), { method: 'GET' });
+
+      if (!response.ok) break;
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.result) ? payload.result : [];
+      if (!rows.length) break;
+
+      for (const tx of rows) {
+        if (!tx || tx.isError === '1') continue;
+
+        const to = String(tx.to || '').toLowerCase();
+        const input = String(tx.input || '').toLowerCase();
+        const functionName = String(tx.functionName || '').toLowerCase();
+        const valueWei = normalizeWeiValue(tx.value);
+        if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
+
+        const isKnownSelector = PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()));
+        const isKnownName = functionName.includes('buyticket') || functionName.includes('enterraffle');
+        const isKnownTicketValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
+        if (!isKnownSelector && !isKnownName && !isKnownTicketValue) continue;
+
+        const hash = tx.hash ? String(tx.hash) : null;
+        if (!hash || seenHashes.has(hash)) continue;
+        seenHashes.add(hash);
+
+        purchases.push({
+          hash,
+          from: tx.from ? ethers.getAddress(tx.from) : null,
+          blockNumber: Number(tx.blockNumber),
+          timestamp: Number(tx.timeStamp) * 1000
+        });
+      }
+
+      if (rows.length < POLYGONSCAN_PAGE_SIZE) break;
+    } catch {
+      break;
+    }
+  }
+
+  return purchases;
+}
+
 async function fetchTicketEventsFromPolygonscan(limit = 50) {
   if (typeof fetch !== 'function') return [];
 
@@ -631,6 +735,95 @@ function parseBlockTimestamp(timestamp) {
   return Number(timestamp);
 }
 
+async function resolveDeploymentBlock(provider) {
+  if (Number.isFinite(deploymentBlockCache)) {
+    return deploymentBlockCache;
+  }
+
+  try {
+    const latest = await provider.getBlockNumber();
+    const latestCode = await provider.getCode(CONTRACT_ADDRESS, latest);
+    if (!latestCode || latestCode === '0x') {
+      return Math.max(0, latest - 2000000);
+    }
+
+    let lo = 0;
+    let hi = latest;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const code = await provider.getCode(CONTRACT_ADDRESS, mid);
+      if (code && code !== '0x') {
+        hi = mid;
+      } else {
+        lo = mid + 1;
+      }
+    }
+
+    deploymentBlockCache = lo;
+    return lo;
+  } catch {
+    const latest = await provider.getBlockNumber();
+    return Math.max(0, latest - 2000000);
+  }
+}
+
+async function rebuildTicketHistoryFromLogs() {
+  const provider = await getReadProvider();
+  if (!provider) {
+    return { total: null, perUser: new Map() };
+  }
+
+  const latest = await provider.getBlockNumber();
+  const fromBlock = await resolveDeploymentBlock(provider);
+  const batchSize = 50000;
+  let total = 0;
+  const perUser = new Map();
+
+  for (let start = fromBlock; start <= latest; start += batchSize) {
+    const end = Math.min(latest, start + batchSize - 1);
+    let logs = [];
+
+    try {
+      logs = await provider.getLogs({
+        address: CONTRACT_ADDRESS,
+        fromBlock: start,
+        toBlock: end,
+        topics: [TICKET_BOUGHT_TOPIC]
+      });
+    } catch {
+      continue;
+    }
+
+    total += logs.length;
+
+    for (const log of logs) {
+      const buyerTopic = Array.isArray(log?.topics) ? log.topics[1] : null;
+      if (!buyerTopic) continue;
+
+      try {
+        const buyer = ethers.getAddress(`0x${buyerTopic.slice(-40)}`).toLowerCase();
+        perUser.set(buyer, (perUser.get(buyer) || 0) + 1);
+      } catch {
+        // Ignore malformed logs.
+      }
+    }
+  }
+
+  ticketHistoryCache = {
+    updatedAt: Date.now(),
+    total,
+    perUser
+  };
+
+  return ticketHistoryCache;
+}
+
+async function getTicketHistoryFromLogs(maxAgeMs = 180000) {
+  const isFresh = ticketHistoryCache.total !== null && (Date.now() - ticketHistoryCache.updatedAt) < maxAgeMs;
+  if (isFresh) return ticketHistoryCache;
+  return rebuildTicketHistoryFromLogs();
+}
+
 export async function watchWinnerEvents(onWinner) {
   const currentContract = await getReadContract();
   if (!currentContract) return () => {};
@@ -696,34 +889,91 @@ export async function buyTicket(signer) {
 }
 
 export async function getUserTickets(walletAddress) {
+  const normalizedAddress = walletAddress ? walletAddress.toLowerCase() : null;
+
   try {
     const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
-    return Number(ticketCount || 0n);
-  } catch {
-    try {
-      const currentContract = await getReadContract();
-      if (!currentContract) return 0;
-      const ticketCount = await currentContract.ticketsOf(walletAddress);
-      return Number(ticketCount || 0n);
-    } catch {
-      return 0;
+    const directValue = Number(ticketCount || 0n);
+    if (Number.isFinite(directValue) && directValue > 0) {
+      return directValue;
     }
+  } catch {
+    // Continue to other fallbacks below.
+  }
+
+  try {
+    const currentContract = await getReadContract();
+    if (currentContract) {
+      const ticketCount = await currentContract.ticketsOf(walletAddress);
+      const directValue = Number(ticketCount || 0n);
+      if (Number.isFinite(directValue) && directValue > 0) {
+        return directValue;
+      }
+    }
+  } catch {
+    // Continue to explorer fallback.
+  }
+
+  if (!normalizedAddress) return 0;
+
+  try {
+    const history = await getTicketHistoryFromLogs();
+    const fromLogs = history?.perUser?.get?.(normalizedAddress);
+    if (Number.isFinite(fromLogs)) {
+      return fromLogs;
+    }
+  } catch {
+    // Continue to explorer fallback.
+  }
+
+  try {
+    const purchases = await fetchAllTicketPurchasesFromPolygonscan();
+    return purchases.reduce((count, purchase) => (
+      purchase?.from && purchase.from.toLowerCase() === normalizedAddress ? count + 1 : count
+    ), 0);
+  } catch {
+    return 0;
   }
 }
 
 export async function getTicketsCount() {
   try {
     const [raw] = await callViaPolygonscan('ticketsCount', []);
-    return Number(raw || 0n);
-  } catch {
-    try {
-      const currentContract = await getReadContract();
-      if (!currentContract) return 0;
-      const raw = await currentContract.ticketsCount();
-      return Number(raw || 0n);
-    } catch {
-      return 0;
+    const directValue = Number(raw || 0n);
+    if (Number.isFinite(directValue) && directValue > 0) {
+      return directValue;
     }
+  } catch {
+    // Continue to other fallbacks below.
+  }
+
+  try {
+    const currentContract = await getReadContract();
+    if (currentContract) {
+      const raw = await currentContract.ticketsCount();
+      const directValue = Number(raw || 0n);
+      if (Number.isFinite(directValue) && directValue > 0) {
+        return directValue;
+      }
+    }
+  } catch {
+    // Continue to explorer fallback.
+  }
+
+  try {
+    const history = await getTicketHistoryFromLogs();
+    if (Number.isFinite(history?.total)) {
+      return history.total;
+    }
+  } catch {
+    // Continue to explorer fallback.
+  }
+
+  try {
+    const purchases = await fetchAllTicketPurchasesFromPolygonscan();
+    return purchases.length;
+  } catch {
+    return 0;
   }
 }
 

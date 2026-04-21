@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, fetchTicketStatsSnapshot } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -38,11 +38,19 @@ export default function App() {
       const shortAddress = formatShortAddress(eventItem?.buyer);
       const roundLabel = Number.isFinite(eventItem?.round) ? `Round ${eventItem.round}` : "Round ?";
 
-      return `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • ${roundLabel} • ${timestamp}`;
+      return `${t('events.ticketPurchased', 'New ticket purchased')} (30 POL) • ${shortAddress} • ${roundLabel} • ${timestamp}`;
     });
   };
 
   const seedFeedFromChain = async () => {
+    const statsSnapshot = await fetchTicketStatsSnapshot(walletAddress, MAX_FEED_ITEMS);
+    const snapshotEvents = Array.isArray(statsSnapshot?.recentEvents) ? statsSnapshot.recentEvents : [];
+    const formattedSnapshotFeed = formatFeedFromEvents(snapshotEvents);
+    if (formattedSnapshotFeed.length > 0) {
+      setFeed(formattedSnapshotFeed);
+      return true;
+    }
+
     const recentEvents = await getRecentTicketEvents(MAX_FEED_ITEMS);
     const formattedRecentFeed = formatFeedFromEvents(recentEvents);
 
@@ -64,16 +72,41 @@ export default function App() {
       setPoolAmount(updatedPool);
     }
 
+    const statsSnapshot = await fetchTicketStatsSnapshot(address, 60);
+    if (statsSnapshot) {
+      const totalFromSnapshot = Number(statsSnapshot.totalTickets);
+      if (Number.isFinite(totalFromSnapshot) && totalFromSnapshot >= 0) {
+        setTicketsBought(totalFromSnapshot);
+        lastObservedTicketsRef.current = totalFromSnapshot;
+      }
+
+      if (address) {
+        const mineFromSnapshot = Number(statsSnapshot.myTickets);
+        if (Number.isFinite(mineFromSnapshot) && mineFromSnapshot >= 0) {
+          setMyTickets(mineFromSnapshot);
+        }
+      }
+    }
+
     const updatedTicketsCount = await getTicketsCount();
-    if (typeof updatedTicketsCount === 'number') {
-      setTicketsBought(updatedTicketsCount);
-      lastObservedTicketsRef.current = updatedTicketsCount;
+    if (typeof updatedTicketsCount === 'number' && updatedTicketsCount > 0) {
+      const nextTickets = Number.isFinite(lastObservedTicketsRef.current)
+        ? Math.max(updatedTicketsCount, lastObservedTicketsRef.current)
+        : updatedTicketsCount;
+      setTicketsBought(nextTickets);
+      lastObservedTicketsRef.current = nextTickets;
+    } else if (typeof updatedPool === "number" && updatedPool > 0) {
+      const poolDerivedTickets = Math.floor(updatedPool / 30);
+      if (poolDerivedTickets > 0) {
+        setTicketsBought(poolDerivedTickets);
+        lastObservedTicketsRef.current = poolDerivedTickets;
+      }
     }
 
     if (address) {
       const updatedUserTickets = await getUserTickets(address);
       if (typeof updatedUserTickets === 'number') {
-        setMyTickets(updatedUserTickets);
+        setMyTickets((prev) => (typeof prev === "number" ? Math.max(prev, updatedUserTickets) : updatedUserTickets));
       }
     }
   };
@@ -128,7 +161,7 @@ export default function App() {
           const shortAddress = formatShortAddress(ticketEvent?.buyer);
           const round = Number.isFinite(ticketEvent?.round) ? ticketEvent.round : "?";
           const timestamp = ticketEvent?.timestamp ? new Date(ticketEvent.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-          const nextMessage = `${t('events.ticketPurchased', 'New ticket purchased')} • ${shortAddress} • Round ${round} • ${timestamp}`;
+          const nextMessage = `${t('events.ticketPurchased', 'New ticket purchased')} (30 POL) • ${shortAddress} • Round ${round} • ${timestamp}`;
           if (nextMessage) {
             setFeed(prev => [nextMessage, ...prev].slice(0, MAX_FEED_ITEMS));
           }
