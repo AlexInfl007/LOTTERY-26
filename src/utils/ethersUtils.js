@@ -42,12 +42,45 @@ function buildExplorerUrl(params = {}) {
   return base.toString();
 }
 
+function buildTicketStatsUrl(params = {}) {
+  const isBrowser = typeof window !== 'undefined' && window.location?.origin;
+  const base = isBrowser
+    ? new URL('/api/ticket-stats', window.location.origin)
+    : null;
+
+  if (!base) return null;
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      base.searchParams.set(key, String(value));
+    }
+  });
+
+  return base.toString();
+}
+
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
 }
 
 export function updateContractInstance(newProvider) {
   setSharedProvider(newProvider);
+}
+
+export async function fetchTicketStatsSnapshot(address = null, limit = 50) {
+  if (typeof fetch !== 'function') return null;
+  const url = buildTicketStatsUrl({ address, limit });
+  if (!url) return null;
+
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    if (!payload || typeof payload !== 'object') return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export async function getCurrentProvider() {
