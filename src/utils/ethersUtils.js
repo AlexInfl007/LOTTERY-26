@@ -12,6 +12,8 @@ const PURCHASE_METHOD_SELECTORS = [
 const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
 const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const TICKET_PRICE_WEI = ethers.parseEther('30');
+const POLYGONSCAN_PAGE_SIZE = 1000;
+const POLYGONSCAN_MAX_PAGES = 30;
 const PUBLIC_RPC_URLS = [
   'https://polygon-rpc.com',
   'https://polygon-bor.publicnode.com',
@@ -506,6 +508,65 @@ async function fetchPurchasesFromPolygonscan(limit) {
   }
 }
 
+async function fetchAllTicketPurchasesFromPolygonscan() {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return [];
+
+  const purchases = [];
+  const seenHashes = new Set();
+
+  for (let page = 1; page <= POLYGONSCAN_MAX_PAGES; page += 1) {
+    try {
+      const response = await fetch(buildExplorerUrl({
+        module: 'account',
+        action: 'txlist',
+        address: CONTRACT_ADDRESS,
+        startblock: 0,
+        endblock: 99999999,
+        page,
+        offset: POLYGONSCAN_PAGE_SIZE,
+        sort: 'asc'
+      }), { method: 'GET' });
+
+      if (!response.ok) break;
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.result) ? payload.result : [];
+      if (!rows.length) break;
+
+      for (const tx of rows) {
+        if (!tx || tx.isError === '1') continue;
+
+        const to = String(tx.to || '').toLowerCase();
+        const input = String(tx.input || '').toLowerCase();
+        const functionName = String(tx.functionName || '').toLowerCase();
+        const valueWei = normalizeWeiValue(tx.value);
+        if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
+
+        const isKnownSelector = PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()));
+        const isKnownName = functionName.includes('buyticket') || functionName.includes('enterraffle');
+        const isKnownTicketValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
+        if (!isKnownSelector && !isKnownName && !isKnownTicketValue) continue;
+
+        const hash = tx.hash ? String(tx.hash) : null;
+        if (!hash || seenHashes.has(hash)) continue;
+        seenHashes.add(hash);
+
+        purchases.push({
+          hash,
+          from: tx.from ? ethers.getAddress(tx.from) : null,
+          blockNumber: Number(tx.blockNumber),
+          timestamp: Number(tx.timeStamp) * 1000
+        });
+      }
+
+      if (rows.length < POLYGONSCAN_PAGE_SIZE) break;
+    } catch {
+      break;
+    }
+  }
+
+  return purchases;
+}
+
 async function fetchTicketEventsFromPolygonscan(limit = 50) {
   if (typeof fetch !== 'function') return [];
 
@@ -696,34 +757,72 @@ export async function buyTicket(signer) {
 }
 
 export async function getUserTickets(walletAddress) {
+  const normalizedAddress = walletAddress ? walletAddress.toLowerCase() : null;
+
   try {
     const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
-    return Number(ticketCount || 0n);
-  } catch {
-    try {
-      const currentContract = await getReadContract();
-      if (!currentContract) return 0;
-      const ticketCount = await currentContract.ticketsOf(walletAddress);
-      return Number(ticketCount || 0n);
-    } catch {
-      return 0;
+    const directValue = Number(ticketCount || 0n);
+    if (Number.isFinite(directValue) && directValue > 0) {
+      return directValue;
     }
+  } catch {
+    // Continue to other fallbacks below.
+  }
+
+  try {
+    const currentContract = await getReadContract();
+    if (currentContract) {
+      const ticketCount = await currentContract.ticketsOf(walletAddress);
+      const directValue = Number(ticketCount || 0n);
+      if (Number.isFinite(directValue) && directValue > 0) {
+        return directValue;
+      }
+    }
+  } catch {
+    // Continue to explorer fallback.
+  }
+
+  if (!normalizedAddress) return 0;
+
+  try {
+    const purchases = await fetchAllTicketPurchasesFromPolygonscan();
+    return purchases.reduce((count, purchase) => (
+      purchase?.from && purchase.from.toLowerCase() === normalizedAddress ? count + 1 : count
+    ), 0);
+  } catch {
+    return 0;
   }
 }
 
 export async function getTicketsCount() {
   try {
     const [raw] = await callViaPolygonscan('ticketsCount', []);
-    return Number(raw || 0n);
-  } catch {
-    try {
-      const currentContract = await getReadContract();
-      if (!currentContract) return 0;
-      const raw = await currentContract.ticketsCount();
-      return Number(raw || 0n);
-    } catch {
-      return 0;
+    const directValue = Number(raw || 0n);
+    if (Number.isFinite(directValue) && directValue > 0) {
+      return directValue;
     }
+  } catch {
+    // Continue to other fallbacks below.
+  }
+
+  try {
+    const currentContract = await getReadContract();
+    if (currentContract) {
+      const raw = await currentContract.ticketsCount();
+      const directValue = Number(raw || 0n);
+      if (Number.isFinite(directValue) && directValue > 0) {
+        return directValue;
+      }
+    }
+  } catch {
+    // Continue to explorer fallback.
+  }
+
+  try {
+    const purchases = await fetchAllTicketPurchasesFromPolygonscan();
+    return purchases.length;
+  } catch {
+    return 0;
   }
 }
 
