@@ -20,6 +20,7 @@ const PUBLIC_RPC_URLS = [
   'https://1rpc.io/matic'
 ];
 let readOnlyProvider = null;
+let injectedProvider = null;
 let deploymentBlockCache = null;
 let ticketHistoryCache = {
   updatedAt: 0,
@@ -61,6 +62,7 @@ function buildTicketStatsUrl(params = {}) {
 
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
+  injectedProvider = null;
 }
 
 export function updateContractInstance(newProvider) {
@@ -84,7 +86,7 @@ export async function fetchTicketStatsSnapshot(address = null, limit = 50) {
 }
 
 export async function getCurrentProvider() {
-  const provider = getSharedProvider();
+  const provider = getSharedProvider() || await getInjectedProvider();
   if (!provider) return null;
 
   try {
@@ -92,6 +94,18 @@ export async function getCurrentProvider() {
     if (Number(network.chainId) !== 137) return null;
     await provider.getBlockNumber();
     return provider;
+  } catch {
+    return null;
+  }
+}
+
+async function getInjectedProvider() {
+  if (typeof window === 'undefined' || !window.ethereum) return null;
+  if (injectedProvider) return injectedProvider;
+
+  try {
+    injectedProvider = new ethers.BrowserProvider(window.ethereum);
+    return injectedProvider;
   } catch {
     return null;
   }
@@ -894,7 +908,7 @@ export async function getUserTickets(walletAddress) {
   try {
     const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
     const directValue = Number(ticketCount || 0n);
-    if (Number.isFinite(directValue) && directValue > 0) {
+    if (Number.isFinite(directValue) && directValue >= 0) {
       return directValue;
     }
   } catch {
@@ -906,7 +920,7 @@ export async function getUserTickets(walletAddress) {
     if (currentContract) {
       const ticketCount = await currentContract.ticketsOf(walletAddress);
       const directValue = Number(ticketCount || 0n);
-      if (Number.isFinite(directValue) && directValue > 0) {
+      if (Number.isFinite(directValue) && directValue >= 0) {
         return directValue;
       }
     }
@@ -940,7 +954,7 @@ export async function getTicketsCount() {
   try {
     const [raw] = await callViaPolygonscan('ticketsCount', []);
     const directValue = Number(raw || 0n);
-    if (Number.isFinite(directValue) && directValue > 0) {
+    if (Number.isFinite(directValue) && directValue >= 0) {
       return directValue;
     }
   } catch {
@@ -952,7 +966,7 @@ export async function getTicketsCount() {
     if (currentContract) {
       const raw = await currentContract.ticketsCount();
       const directValue = Number(raw || 0n);
-      if (Number.isFinite(directValue) && directValue > 0) {
+      if (Number.isFinite(directValue) && directValue >= 0) {
         return directValue;
       }
     }

@@ -89,7 +89,7 @@ export default function App() {
     }
 
     const updatedTicketsCount = await getTicketsCount();
-    if (typeof updatedTicketsCount === 'number' && updatedTicketsCount > 0) {
+    if (typeof updatedTicketsCount === 'number' && updatedTicketsCount >= 0) {
       const nextTickets = Number.isFinite(lastObservedTicketsRef.current)
         ? Math.max(updatedTicketsCount, lastObservedTicketsRef.current)
         : updatedTicketsCount;

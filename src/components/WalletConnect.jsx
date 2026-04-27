@@ -108,11 +108,11 @@ export default function WalletConnect({ onConnect }) {
       setAddress(accounts[0]);
       try {
         const restoredSession = await restoreWalletSession();
-        if (!restoredSession?.address) return;
-
-        updateProvider(restoredSession.provider);
-        updateContractInstance(restoredSession.provider);
-        onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
+        if (restoredSession?.provider && restoredSession?.signer) {
+          updateProvider(restoredSession.provider);
+          updateContractInstance(restoredSession.provider);
+          onConnect && onConnect(accounts[0], restoredSession.provider, restoredSession.signer);
+        }
       } catch {
         // Keep local wallet badge updated even if full session restore fails.
       }
