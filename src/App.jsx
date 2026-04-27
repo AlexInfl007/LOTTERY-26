@@ -340,7 +340,7 @@ export default function App() {
                     </div>
                     <div className={styles.roundLabel}>Round: 1</div>
                   </div>
-                  <div className={styles.subHeaderRow}>{t("ticketsBought", "билетов куплено")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
+                  <div className={styles.subHeaderRow}>{t("ticketsBought", "Всего билетов")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
                 </div>
 
                 {poolAmount !== null ? (
