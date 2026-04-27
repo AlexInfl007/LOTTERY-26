@@ -158,13 +158,13 @@ export async function getCurrentContract() {
 
 export async function readPrizePool() {
   try {
-    const [raw] = await callViaPolygonscan('prizePool', []);
+    const currentContract = await getReadContract();
+    if (!currentContract) throw new Error('Contract unavailable');
+    const raw = await currentContract.prizePool();
     return Number(ethers.formatEther(raw || 0n));
   } catch {
     try {
-      const currentContract = await getReadContract();
-      if (!currentContract) return 0;
-      const raw = await currentContract.prizePool();
+      const [raw] = await callViaPolygonscan('prizePool', []);
       return Number(ethers.formatEther(raw || 0n));
     } catch {
       return 0;
@@ -181,6 +181,7 @@ export async function watchTicketEvents(onTicketEvent) {
   const provider = await getReadProvider();
   const seenTx = new Set();
   const seenLogIds = new Set();
+  let lastObservedBlock = null;
 
   const handler = async (buyer, round) => {
     const timestamp = Date.now();
@@ -237,13 +238,32 @@ export async function watchTicketEvents(onTicketEvent) {
     provider.on('block', fallbackBlockHandler);
   }
 
+  if (provider) {
+    try {
+      lastObservedBlock = await provider.getBlockNumber();
+    } catch {
+      lastObservedBlock = null;
+    }
+  }
+
   const pollInterval = setInterval(async () => {
     try {
-      const recentEvents = await fetchTicketEventsFromPolygonscan(25);
-      const fallbackTransfers = recentEvents.length === 0
-        ? mapPurchasesToFeedEvents(await fetchPurchasesFromPolygonscan(25))
-        : [];
-      const combinedEvents = [...recentEvents, ...fallbackTransfers];
+      let combinedEvents = [];
+      if (provider && Number.isFinite(lastObservedBlock)) {
+        const latest = await provider.getBlockNumber();
+        if (latest > lastObservedBlock) {
+          const fromBlock = Math.max(0, lastObservedBlock - 2);
+          combinedEvents = await fetchTicketEventsFromProvider(provider, 100, fromBlock, latest);
+          lastObservedBlock = latest;
+        }
+      } else {
+        const recentEvents = await fetchTicketEventsFromPolygonscan(25);
+        const fallbackTransfers = recentEvents.length === 0
+          ? mapPurchasesToFeedEvents(await fetchPurchasesFromPolygonscan(25))
+          : [];
+        combinedEvents = [...recentEvents, ...fallbackTransfers];
+      }
+
       for (const eventItem of combinedEvents.reverse()) {
         if (!eventItem?.id || seenLogIds.has(eventItem.id)) continue;
         seenLogIds.add(eventItem.id);
@@ -271,6 +291,18 @@ export async function watchTicketEvents(onTicketEvent) {
 }
 
 export async function getRecentTicketEvents(limit = 50) {
+  const provider = await getReadProvider();
+  if (provider) {
+    try {
+      const providerEvents = await fetchTicketEventsFromProvider(provider, limit);
+      if (providerEvents.length > 0) {
+        return providerEvents;
+      }
+    } catch {
+      // Continue to explorer fallbacks.
+    }
+  }
+
   try {
     const explorerEvents = await fetchTicketEventsFromPolygonscan(limit);
     if (explorerEvents.length > 0) {
@@ -285,7 +317,6 @@ export async function getRecentTicketEvents(limit = 50) {
     // Continue with RPC fallback.
   }
 
-  const provider = await getReadProvider();
   const currentContract = await getReadContract();
   if (!provider || !currentContract) {
     return mapPurchasesToFeedEvents(await getRecentTicketPurchases(limit, 120000, null)).slice(0, limit);
@@ -343,6 +374,69 @@ export async function getRecentTicketEvents(limit = 50) {
   if (events.length > 0) return events;
 
   return mapPurchasesToFeedEvents(await getRecentTicketPurchases(limit, 120000, null)).slice(0, limit);
+}
+
+async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = null, toBlock = null) {
+  const latestBlock = Number.isFinite(toBlock) ? toBlock : await provider.getBlockNumber();
+  const batchSize = 5000;
+  const minBlock = Number.isFinite(fromBlock) ? Math.max(0, fromBlock) : Math.max(0, latestBlock - 250000);
+  const blockTimestamps = new Map();
+  const events = [];
+
+  for (let end = latestBlock; end >= minBlock && events.length < limit; end -= batchSize) {
+    const start = Math.max(minBlock, end - batchSize + 1);
+    let logs = [];
+    try {
+      logs = await provider.getLogs({
+        address: CONTRACT_ADDRESS,
+        topics: [TICKET_BOUGHT_TOPIC],
+        fromBlock: start,
+        toBlock: end
+      });
+    } catch {
+      continue;
+    }
+
+    for (let i = logs.length - 1; i >= 0 && events.length < limit; i -= 1) {
+      const parsed = parseTicketBoughtLog(logs[i], i);
+      if (!parsed) continue;
+
+      const blockNumber = Number(logs[i]?.blockNumber);
+      if (!blockTimestamps.has(blockNumber)) {
+        try {
+          const block = await provider.getBlock(blockNumber);
+          blockTimestamps.set(blockNumber, block?.timestamp ? Number(block.timestamp) * 1000 : Date.now());
+        } catch {
+          blockTimestamps.set(blockNumber, Date.now());
+        }
+      }
+
+      events.push({
+        ...parsed,
+        timestamp: blockTimestamps.get(blockNumber)
+      });
+    }
+  }
+
+  return events;
+}
+
+function parseTicketBoughtLog(log, index = 0) {
+  const buyerTopic = Array.isArray(log?.topics) ? log.topics[1] : null;
+  const roundTopic = Array.isArray(log?.topics) ? log.topics[2] : null;
+  if (!buyerTopic) return null;
+
+  try {
+    const buyer = ethers.getAddress(`0x${buyerTopic.slice(-40)}`);
+    const round = roundTopic ? Number(BigInt(roundTopic)) : null;
+    return {
+      id: `${log?.transactionHash || 'tx'}:${log?.index ?? log?.logIndex ?? index}`,
+      buyer,
+      round
+    };
+  } catch {
+    return null;
+  }
 }
 
 function mapPurchasesToFeedEvents(purchases = []) {
@@ -906,7 +1000,9 @@ export async function getUserTickets(walletAddress) {
   const normalizedAddress = walletAddress ? walletAddress.toLowerCase() : null;
 
   try {
-    const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
+    const currentContract = await getReadContract();
+    if (!currentContract) throw new Error('Contract unavailable');
+    const ticketCount = await currentContract.ticketsOf(walletAddress);
     const directValue = Number(ticketCount || 0n);
     if (Number.isFinite(directValue) && directValue >= 0) {
       return directValue;
@@ -916,16 +1012,13 @@ export async function getUserTickets(walletAddress) {
   }
 
   try {
-    const currentContract = await getReadContract();
-    if (currentContract) {
-      const ticketCount = await currentContract.ticketsOf(walletAddress);
-      const directValue = Number(ticketCount || 0n);
-      if (Number.isFinite(directValue) && directValue >= 0) {
-        return directValue;
-      }
+    const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
+    const directValue = Number(ticketCount || 0n);
+    if (Number.isFinite(directValue) && directValue >= 0) {
+      return directValue;
     }
   } catch {
-    // Continue to explorer fallback.
+    // Continue to next fallback.
   }
 
   if (!normalizedAddress) return 0;
@@ -952,7 +1045,9 @@ export async function getUserTickets(walletAddress) {
 
 export async function getTicketsCount() {
   try {
-    const [raw] = await callViaPolygonscan('ticketsCount', []);
+    const currentContract = await getReadContract();
+    if (!currentContract) throw new Error('Contract unavailable');
+    const raw = await currentContract.ticketsCount();
     const directValue = Number(raw || 0n);
     if (Number.isFinite(directValue) && directValue >= 0) {
       return directValue;
@@ -962,16 +1057,13 @@ export async function getTicketsCount() {
   }
 
   try {
-    const currentContract = await getReadContract();
-    if (currentContract) {
-      const raw = await currentContract.ticketsCount();
-      const directValue = Number(raw || 0n);
-      if (Number.isFinite(directValue) && directValue >= 0) {
-        return directValue;
-      }
+    const [raw] = await callViaPolygonscan('ticketsCount', []);
+    const directValue = Number(raw || 0n);
+    if (Number.isFinite(directValue) && directValue >= 0) {
+      return directValue;
     }
   } catch {
-    // Continue to explorer fallback.
+    // Continue to next fallback.
   }
 
   try {

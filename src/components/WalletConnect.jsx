@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { ethers } from "ethers";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
@@ -82,6 +83,13 @@ export default function WalletConnect({ onConnect }) {
 
           setAddress(currentAddress);
           setConnected(true);
+          if (window.ethereum) {
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            updateProvider(provider);
+            updateContractInstance(provider);
+            onConnect && onConnect(currentAddress, provider, signer);
+          }
           return;
         }
 
