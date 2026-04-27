@@ -62,10 +62,10 @@
     "bought": "купил 3 билета",
     "depositedLarge": "внес 90POL в пул",
     "depositedShort": "внес 30POL",
-    "ticketPurchased": "Куплен новый билет"
+    "ticketPurchased": "Внесено 30 POL в контракт (куплен билет)"
   },
   "liveFeed": "Live feed:",
-  "ticketsBought": "билетов куплено",
+  "ticketsBought": "Всего билетов",
   "collectingTo": "Собираем пул до",
   "eachTicketIncreases": "Каждый билет увеличивает джекпот.",
   "myTickets": "Мои билеты",

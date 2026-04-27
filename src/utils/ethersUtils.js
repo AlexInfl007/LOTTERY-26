@@ -14,14 +14,6 @@ const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const TICKET_PRICE_WEI = ethers.parseEther('30');
 const POLYGONSCAN_PAGE_SIZE = 1000;
 const POLYGONSCAN_MAX_PAGES = 30;
-const PUBLIC_RPC_URLS = [
-  'https://polygon-rpc.com',
-  'https://polygon-bor.publicnode.com',
-  'https://polygon.llamarpc.com',
-  'https://1rpc.io/matic'
-];
-let readOnlyProvider = null;
-let readOnlyProviderPromise = null;
 let injectedProvider = null;
 let deploymentBlockCache = null;
 let ticketHistoryCache = {
@@ -72,16 +64,14 @@ export function updateContractInstance(newProvider) {
 }
 
 export async function fetchTicketStatsSnapshot(address = null, limit = 50) {
-  if (typeof fetch !== 'function') return null;
-  const url = buildTicketStatsUrl({ address, limit });
-  if (!url) return null;
+  const provider = await getCurrentProvider();
+  if (!provider) return null;
 
   try {
-    const response = await fetch(url, { method: 'GET' });
-    if (!response.ok) return null;
-    const payload = await response.json();
-    if (!payload || typeof payload !== 'object') return null;
-    return payload;
+    const totalTickets = await getTicketsCount();
+    const myTickets = address ? await getUserTickets(address) : null;
+    const recentEvents = await getRecentTicketEvents(limit);
+    return { totalTickets, myTickets, recentEvents, source: 'wallet-provider' };
   } catch {
     return null;
   }
@@ -113,34 +103,8 @@ async function getInjectedProvider() {
   }
 }
 
-async function getReadOnlyProvider() {
-  if (readOnlyProvider) return readOnlyProvider;
-  if (readOnlyProviderPromise) return readOnlyProviderPromise;
-
-  readOnlyProviderPromise = (async () => {
-    for (const rpcUrl of PUBLIC_RPC_URLS) {
-      try {
-        const provider = new ethers.JsonRpcProvider(rpcUrl, 137, { staticNetwork: true });
-        await provider.getBlockNumber();
-        readOnlyProvider = provider;
-        return readOnlyProvider;
-      } catch {
-        // Try next RPC URL.
-      }
-    }
-
-    return null;
-  })();
-
-  const provider = await readOnlyProviderPromise;
-  readOnlyProviderPromise = null;
-  return provider;
-}
-
 async function getReadProvider() {
-  const walletProvider = await getCurrentProvider();
-  if (walletProvider) return walletProvider;
-  return await getReadOnlyProvider();
+  return await getCurrentProvider();
 }
 
 async function getReadContract() {
