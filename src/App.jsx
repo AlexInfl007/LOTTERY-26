@@ -90,11 +90,8 @@ export default function App() {
 
     const updatedTicketsCount = await getTicketsCount();
     if (typeof updatedTicketsCount === 'number' && updatedTicketsCount >= 0) {
-      const nextTickets = Number.isFinite(lastObservedTicketsRef.current)
-        ? Math.max(updatedTicketsCount, lastObservedTicketsRef.current)
-        : updatedTicketsCount;
-      setTicketsBought(nextTickets);
-      lastObservedTicketsRef.current = nextTickets;
+      setTicketsBought(updatedTicketsCount);
+      lastObservedTicketsRef.current = updatedTicketsCount;
     } else if (typeof updatedPool === "number" && updatedPool > 0) {
       const poolDerivedTickets = Math.floor(updatedPool / 30);
       if (poolDerivedTickets > 0) {
@@ -106,7 +103,7 @@ export default function App() {
     if (address) {
       const updatedUserTickets = await getUserTickets(address);
       if (typeof updatedUserTickets === 'number') {
-        setMyTickets((prev) => (typeof prev === "number" ? Math.max(prev, updatedUserTickets) : updatedUserTickets));
+        setMyTickets(updatedUserTickets);
       }
     }
   };

@@ -9,12 +9,8 @@ const PURCHASE_METHOD_SELECTORS = [
   '0x' + ethers.id('enterRaffle()').slice(2, 10),
   '0x' + ethers.id('buyTicket()').slice(2, 10)
 ];
-const POLYGONSCAN_TXLIST_ENDPOINT = 'https://api.polygonscan.com/api';
 const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const TICKET_PRICE_WEI = ethers.parseEther('30');
-const POLYGONSCAN_PAGE_SIZE = 1000;
-const POLYGONSCAN_MAX_PAGES = 30;
-let injectedProvider = null;
 let deploymentBlockCache = null;
 let ticketHistoryCache = {
   updatedAt: 0,
@@ -22,41 +18,8 @@ let ticketHistoryCache = {
   perUser: new Map()
 };
 
-function buildExplorerUrl(params = {}) {
-  const isBrowser = typeof window !== 'undefined' && window.location?.origin;
-  const base = isBrowser
-    ? new URL('/api/polygonscan', window.location.origin)
-    : new URL(POLYGONSCAN_TXLIST_ENDPOINT);
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      base.searchParams.set(key, String(value));
-    }
-  });
-
-  return base.toString();
-}
-
-function buildTicketStatsUrl(params = {}) {
-  const isBrowser = typeof window !== 'undefined' && window.location?.origin;
-  const base = isBrowser
-    ? new URL('/api/ticket-stats', window.location.origin)
-    : null;
-
-  if (!base) return null;
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      base.searchParams.set(key, String(value));
-    }
-  });
-
-  return base.toString();
-}
-
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
-  injectedProvider = null;
 }
 
 export function updateContractInstance(newProvider) {
@@ -78,7 +41,7 @@ export async function fetchTicketStatsSnapshot(address = null, limit = 50) {
 }
 
 export async function getCurrentProvider() {
-  const provider = getSharedProvider() || await getInjectedProvider();
+  const provider = getSharedProvider();
   if (!provider) return null;
 
   try {
@@ -86,18 +49,6 @@ export async function getCurrentProvider() {
     if (Number(network.chainId) !== 137) return null;
     await provider.getBlockNumber();
     return provider;
-  } catch {
-    return null;
-  }
-}
-
-async function getInjectedProvider() {
-  if (typeof window === 'undefined' || !window.ethereum) return null;
-  if (injectedProvider) return injectedProvider;
-
-  try {
-    injectedProvider = new ethers.BrowserProvider(window.ethereum);
-    return injectedProvider;
   } catch {
     return null;
   }
@@ -132,12 +83,7 @@ export async function readPrizePool() {
     const raw = await currentContract.prizePool();
     return Number(ethers.formatEther(raw || 0n));
   } catch {
-    try {
-      const [raw] = await callViaPolygonscan('prizePool', []);
-      return Number(ethers.formatEther(raw || 0n));
-    } catch {
-      return 0;
-    }
+    return null;
   }
 }
 
@@ -225,12 +171,6 @@ export async function watchTicketEvents(onTicketEvent) {
           combinedEvents = await fetchTicketEventsFromProvider(provider, 100, fromBlock, latest);
           lastObservedBlock = latest;
         }
-      } else {
-        const recentEvents = await fetchTicketEventsFromPolygonscan(25);
-        const fallbackTransfers = recentEvents.length === 0
-          ? mapPurchasesToFeedEvents(await fetchPurchasesFromPolygonscan(25))
-          : [];
-        combinedEvents = [...recentEvents, ...fallbackTransfers];
       }
 
       for (const eventItem of combinedEvents.reverse()) {
@@ -261,35 +201,19 @@ export async function watchTicketEvents(onTicketEvent) {
 
 export async function getRecentTicketEvents(limit = 50) {
   const provider = await getReadProvider();
-  if (provider) {
-    try {
-      const providerEvents = await fetchTicketEventsFromProvider(provider, limit);
-      if (providerEvents.length > 0) {
-        return providerEvents;
-      }
-    } catch {
-      // Continue to explorer fallbacks.
-    }
-  }
+  if (!provider) return [];
 
   try {
-    const explorerEvents = await fetchTicketEventsFromPolygonscan(limit);
-    if (explorerEvents.length > 0) {
-      return explorerEvents;
-    }
-
-    const transferEvents = mapPurchasesToFeedEvents(await fetchPurchasesFromPolygonscan(limit));
-    if (transferEvents.length > 0) {
-      return transferEvents;
+    const providerEvents = await fetchTicketEventsFromProvider(provider, limit);
+    if (providerEvents.length > 0) {
+      return providerEvents;
     }
   } catch {
-    // Continue with RPC fallback.
+    // Continue with contract scan fallback.
   }
 
   const currentContract = await getReadContract();
-  if (!provider || !currentContract) {
-    return mapPurchasesToFeedEvents(await getRecentTicketPurchases(limit, 120000, null)).slice(0, limit);
-  }
+  if (!currentContract) return [];
 
   const latestBlockNumber = await provider.getBlockNumber();
   const EVENT_BATCH = 3000;
@@ -340,9 +264,7 @@ export async function getRecentTicketEvents(limit = 50) {
     }
   }
 
-  if (events.length > 0) return events;
-
-  return mapPurchasesToFeedEvents(await getRecentTicketPurchases(limit, 120000, null)).slice(0, limit);
+  return events;
 }
 
 async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = null, toBlock = null) {
@@ -433,9 +355,6 @@ export async function getRecentTicketPurchases(limit = 15, blocksToScan = 120000
   } catch {
     // Fallbacks below.
   }
-
-  const fromExplorer = await fetchPurchasesFromPolygonscan(limit);
-  if (fromExplorer.length > 0) return fromExplorer.slice(0, limit);
 
   try {
     const byBlockScan = await scanPurchasesFromBlocks(provider, limit, Math.min(blocksToScan, 5000), totalTickets);
@@ -577,159 +496,6 @@ async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTicke
   }
 
   return purchases;
-}
-
-async function fetchPurchasesFromPolygonscan(limit) {
-  if (typeof window === 'undefined' || typeof fetch !== 'function') return [];
-
-  try {
-    const response = await fetch(buildExplorerUrl({
-      module: 'account',
-      action: 'txlist',
-      address: CONTRACT_ADDRESS,
-      startblock: 0,
-      endblock: 99999999,
-      page: 1,
-      offset: Math.max(25, limit * 3),
-      sort: 'desc'
-    }), { method: 'GET' });
-    if (!response.ok) return [];
-
-    const payload = await response.json();
-    const rows = Array.isArray(payload?.result) ? payload.result : [];
-    if (!rows.length) return [];
-
-    const purchases = [];
-    for (const tx of rows) {
-      if (purchases.length >= limit) break;
-      if (!tx || tx.isError === '1') continue;
-
-      const to = String(tx.to || '').toLowerCase();
-      const input = String(tx.input || '').toLowerCase();
-      const functionName = String(tx.functionName || '').toLowerCase();
-      const valueWei = normalizeWeiValue(tx.value);
-      if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
-      const isKnownSelector = PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()));
-      const isKnownName = functionName.includes('buyticket') || functionName.includes('enterraffle');
-      const isKnownTicketValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
-      if (!isKnownSelector && !isKnownName && !isKnownTicketValue) continue;
-
-      purchases.push({
-        hash: tx.hash,
-        from: tx.from,
-        blockNumber: Number(tx.blockNumber),
-        timestamp: Number(tx.timeStamp) * 1000
-      });
-    }
-
-    return purchases;
-  } catch {
-    return [];
-  }
-}
-
-async function fetchAllTicketPurchasesFromPolygonscan() {
-  if (typeof window === 'undefined' || typeof fetch !== 'function') return [];
-
-  const purchases = [];
-  const seenHashes = new Set();
-
-  for (let page = 1; page <= POLYGONSCAN_MAX_PAGES; page += 1) {
-    try {
-      const response = await fetch(buildExplorerUrl({
-        module: 'account',
-        action: 'txlist',
-        address: CONTRACT_ADDRESS,
-        startblock: 0,
-        endblock: 99999999,
-        page,
-        offset: POLYGONSCAN_PAGE_SIZE,
-        sort: 'asc'
-      }), { method: 'GET' });
-
-      if (!response.ok) break;
-      const payload = await response.json();
-      const rows = Array.isArray(payload?.result) ? payload.result : [];
-      if (!rows.length) break;
-
-      for (const tx of rows) {
-        if (!tx || tx.isError === '1') continue;
-
-        const to = String(tx.to || '').toLowerCase();
-        const input = String(tx.input || '').toLowerCase();
-        const functionName = String(tx.functionName || '').toLowerCase();
-        const valueWei = normalizeWeiValue(tx.value);
-        if (to !== CONTRACT_ADDRESS.toLowerCase()) continue;
-
-        const isKnownSelector = PURCHASE_METHOD_SELECTORS.some((selector) => input.startsWith(selector.toLowerCase()));
-        const isKnownName = functionName.includes('buyticket') || functionName.includes('enterraffle');
-        const isKnownTicketValue = valueWei !== null && valueWei === TICKET_PRICE_WEI;
-        if (!isKnownSelector && !isKnownName && !isKnownTicketValue) continue;
-
-        const hash = tx.hash ? String(tx.hash) : null;
-        if (!hash || seenHashes.has(hash)) continue;
-        seenHashes.add(hash);
-
-        purchases.push({
-          hash,
-          from: tx.from ? ethers.getAddress(tx.from) : null,
-          blockNumber: Number(tx.blockNumber),
-          timestamp: Number(tx.timeStamp) * 1000
-        });
-      }
-
-      if (rows.length < POLYGONSCAN_PAGE_SIZE) break;
-    } catch {
-      break;
-    }
-  }
-
-  return purchases;
-}
-
-async function fetchTicketEventsFromPolygonscan(limit = 50) {
-  if (typeof fetch !== 'function') return [];
-
-  try {
-    const response = await fetch(buildExplorerUrl({
-      module: 'logs',
-      action: 'getLogs',
-      fromBlock: 0,
-      toBlock: 'latest',
-      address: CONTRACT_ADDRESS,
-      topic0: TICKET_BOUGHT_TOPIC,
-      page: 1,
-      offset: Math.max(20, limit)
-    }), { method: 'GET' });
-    if (!response.ok) return [];
-
-    const payload = await response.json();
-    const logs = Array.isArray(payload?.result) ? payload.result : [];
-    if (!logs.length) return [];
-
-    return logs
-      .slice(-limit)
-      .reverse()
-      .map((log, index) => {
-        const buyerTopic = Array.isArray(log?.topics) ? log.topics[1] : null;
-        const roundTopic = Array.isArray(log?.topics) ? log.topics[2] : null;
-        const buyer = buyerTopic ? ethers.getAddress(`0x${buyerTopic.slice(-40)}`) : null;
-        const round = roundTopic ? Number(BigInt(roundTopic)) : null;
-        const rawTs = log?.timeStamp;
-        const ts = typeof rawTs === 'string'
-          ? (rawTs.startsWith('0x') ? parseInt(rawTs, 16) : Number(rawTs))
-          : NaN;
-
-        return {
-          id: `${log?.transactionHash || 'tx'}:${log?.logIndex ?? index}`,
-          buyer,
-          round,
-          timestamp: Number.isFinite(ts) ? ts * 1000 : Date.now()
-        };
-      });
-  } catch {
-    return [];
-  }
 }
 
 function resolveBlocksToScan(defaultBlocksToScan, totalTickets) {
@@ -980,16 +746,6 @@ export async function getUserTickets(walletAddress) {
     // Continue to other fallbacks below.
   }
 
-  try {
-    const [ticketCount] = await callViaPolygonscan('ticketsOf', [walletAddress]);
-    const directValue = Number(ticketCount || 0n);
-    if (Number.isFinite(directValue) && directValue >= 0) {
-      return directValue;
-    }
-  } catch {
-    // Continue to next fallback.
-  }
-
   if (!normalizedAddress) return 0;
 
   try {
@@ -1002,14 +758,7 @@ export async function getUserTickets(walletAddress) {
     // Continue to explorer fallback.
   }
 
-  try {
-    const purchases = await fetchAllTicketPurchasesFromPolygonscan();
-    return purchases.reduce((count, purchase) => (
-      purchase?.from && purchase.from.toLowerCase() === normalizedAddress ? count + 1 : count
-    ), 0);
-  } catch {
-    return 0;
-  }
+  return 0;
 }
 
 export async function getTicketsCount() {
@@ -1026,16 +775,6 @@ export async function getTicketsCount() {
   }
 
   try {
-    const [raw] = await callViaPolygonscan('ticketsCount', []);
-    const directValue = Number(raw || 0n);
-    if (Number.isFinite(directValue) && directValue >= 0) {
-      return directValue;
-    }
-  } catch {
-    // Continue to next fallback.
-  }
-
-  try {
     const history = await getTicketHistoryFromLogs();
     if (Number.isFinite(history?.total)) {
       return history.total;
@@ -1044,36 +783,7 @@ export async function getTicketsCount() {
     // Continue to explorer fallback.
   }
 
-  try {
-    const purchases = await fetchAllTicketPurchasesFromPolygonscan();
-    return purchases.length;
-  } catch {
-    return 0;
-  }
-}
-
-async function callViaPolygonscan(functionName, args) {
-  if (typeof fetch !== 'function') {
-    throw new Error('fetch unavailable');
-  }
-
-  const iface = new ethers.Interface(CONTRACT_ABI);
-  const data = iface.encodeFunctionData(functionName, args);
-  const response = await fetch(buildExplorerUrl({
-    module: 'proxy',
-    action: 'eth_call',
-    to: CONTRACT_ADDRESS,
-    data,
-    tag: 'latest'
-  }), { method: 'GET' });
-  if (!response.ok) throw new Error('Polygonscan eth_call failed');
-  const payload = await response.json();
-  const resultHex = payload?.result;
-  if (typeof resultHex !== 'string' || !resultHex.startsWith('0x')) {
-    throw new Error('Invalid Polygonscan eth_call response');
-  }
-
-  return iface.decodeFunctionResult(functionName, resultHex);
+  return null;
 }
 
 export async function getRecentWinners() {
