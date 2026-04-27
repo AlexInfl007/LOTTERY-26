@@ -17,9 +17,11 @@ const POLYGONSCAN_MAX_PAGES = 30;
 const PUBLIC_RPC_URLS = [
   'https://polygon-rpc.com',
   'https://polygon-bor.publicnode.com',
+  'https://polygon.llamarpc.com',
   'https://1rpc.io/matic'
 ];
 let readOnlyProvider = null;
+let readOnlyProviderPromise = null;
 let injectedProvider = null;
 let deploymentBlockCache = null;
 let ticketHistoryCache = {
@@ -111,31 +113,34 @@ async function getInjectedProvider() {
   }
 }
 
-function getReadOnlyProvider() {
-  if (typeof window !== 'undefined') {
-    // Browser RPC calls to public Polygon endpoints are often blocked by CORS.
-    // In browser we rely on wallet provider and/or explorer proxy fallbacks.
-    return null;
-  }
-
+async function getReadOnlyProvider() {
   if (readOnlyProvider) return readOnlyProvider;
+  if (readOnlyProviderPromise) return readOnlyProviderPromise;
 
-  for (const rpcUrl of PUBLIC_RPC_URLS) {
-    try {
-      readOnlyProvider = new ethers.JsonRpcProvider(rpcUrl, 137, { staticNetwork: true });
-      return readOnlyProvider;
-    } catch {
-      // Try next RPC URL.
+  readOnlyProviderPromise = (async () => {
+    for (const rpcUrl of PUBLIC_RPC_URLS) {
+      try {
+        const provider = new ethers.JsonRpcProvider(rpcUrl, 137, { staticNetwork: true });
+        await provider.getBlockNumber();
+        readOnlyProvider = provider;
+        return readOnlyProvider;
+      } catch {
+        // Try next RPC URL.
+      }
     }
-  }
 
-  return null;
+    return null;
+  })();
+
+  const provider = await readOnlyProviderPromise;
+  readOnlyProviderPromise = null;
+  return provider;
 }
 
 async function getReadProvider() {
   const walletProvider = await getCurrentProvider();
   if (walletProvider) return walletProvider;
-  return getReadOnlyProvider();
+  return await getReadOnlyProvider();
 }
 
 async function getReadContract() {
