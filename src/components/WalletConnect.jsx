@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { ethers } from "ethers";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
@@ -82,6 +83,13 @@ export default function WalletConnect({ onConnect }) {
 
           setAddress(currentAddress);
           setConnected(true);
+          if (window.ethereum) {
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            updateProvider(provider);
+            updateContractInstance(provider);
+            onConnect && onConnect(currentAddress, provider, signer);
+          }
           return;
         }
 
@@ -108,11 +116,11 @@ export default function WalletConnect({ onConnect }) {
       setAddress(accounts[0]);
       try {
         const restoredSession = await restoreWalletSession();
-        if (!restoredSession?.address) return;
-
-        updateProvider(restoredSession.provider);
-        updateContractInstance(restoredSession.provider);
-        onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
+        if (restoredSession?.provider && restoredSession?.signer) {
+          updateProvider(restoredSession.provider);
+          updateContractInstance(restoredSession.provider);
+          onConnect && onConnect(accounts[0], restoredSession.provider, restoredSession.signer);
+        }
       } catch {
         // Keep local wallet badge updated even if full session restore fails.
       }
