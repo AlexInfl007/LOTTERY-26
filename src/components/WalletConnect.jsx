@@ -100,18 +100,22 @@ export default function WalletConnect({ onConnect }) {
         return;
       }
 
-      setConnected(true);
-      setAddress(accounts[0]);
       try {
         const restoredSession = await restoreWalletSession();
-        if (restoredSession?.provider && restoredSession?.signer) {
+        if (restoredSession?.provider && restoredSession?.signer && restoredSession?.address) {
+          setConnected(true);
+          setAddress(restoredSession.address);
           updateProvider(restoredSession.provider);
           updateContractInstance(restoredSession.provider);
-          onConnect && onConnect(accounts[0], restoredSession.provider, restoredSession.signer);
+          onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
+          return;
         }
       } catch {
-        // Keep local wallet badge updated even if full session restore fails.
+        // fall through to disconnected state
       }
+
+      setConnected(false);
+      setAddress(null);
     };
 
     const onChainChanged = () => {
