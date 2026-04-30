@@ -199,72 +199,52 @@ export async function watchTicketEvents(onTicketEvent) {
   };
 }
 
-export async function getRecentTicketEvents(limit = 50) {
+export async function getRecentTicketEvents(limit = 15) {
   const provider = await getReadProvider();
-  if (!provider) return [];
-
-  try {
-    const providerEvents = await fetchTicketEventsFromProvider(provider, limit);
-    if (providerEvents.length > 0) {
-      return providerEvents;
-    }
-  } catch {
-    // Continue with contract scan fallback.
-  }
-
   const currentContract = await getReadContract();
-  if (!currentContract) return [];
+  if (!provider || !currentContract) return [];
 
   const latestBlockNumber = await provider.getBlockNumber();
-  const EVENT_BATCH = 3000;
-  const MAX_SCAN_BLOCKS = 250000;
-  const MIN_BLOCK = Math.max(0, latestBlockNumber - MAX_SCAN_BLOCKS);
-  let consecutiveFailures = 0;
+  const EVENT_BATCH = 50000;
   const events = [];
+  const blockTimestamps = new Map();
 
-  for (let endBlock = latestBlockNumber; endBlock >= MIN_BLOCK; endBlock -= EVENT_BATCH) {
-    if (events.length >= limit) break;
-    const startBlock = Math.max(MIN_BLOCK, endBlock - EVENT_BATCH + 1);
+  for (let startBlock = 0; startBlock <= latestBlockNumber; startBlock += EVENT_BATCH) {
+    const endBlock = Math.min(latestBlockNumber, startBlock + EVENT_BATCH - 1);
 
     let batch = [];
     try {
       batch = await currentContract.queryFilter('TicketBought', startBlock, endBlock);
-      consecutiveFailures = 0;
     } catch {
-      consecutiveFailures += 1;
-      if (consecutiveFailures >= 5) {
-        break;
-      }
       continue;
     }
 
-    for (let i = batch.length - 1; i >= 0; i -= 1) {
-      if (events.length >= limit) break;
-      const ev = batch[i];
+    for (const ev of batch) {
       const buyer = ev?.args?.buyer || null;
       const round = ev?.args?.round !== undefined ? Number(ev.args.round) : null;
       const blockNumber = ev?.blockNumber;
 
-      let timestamp = Date.now();
-      if (typeof blockNumber === 'number') {
+      if (!blockTimestamps.has(blockNumber)) {
         try {
           const block = await provider.getBlock(blockNumber);
-          if (block?.timestamp) timestamp = Number(block.timestamp) * 1000;
+          blockTimestamps.set(blockNumber, block?.timestamp ? Number(block.timestamp) * 1000 : Date.now());
         } catch {
-          // keep fallback timestamp
+          blockTimestamps.set(blockNumber, Date.now());
         }
       }
 
       events.push({
-        id: `${ev?.transactionHash || 'tx'}:${ev?.index ?? i}`,
+        id: `${ev?.transactionHash || 'tx'}:${ev?.index ?? 0}`,
         buyer,
         round,
-        timestamp
+        timestamp: blockTimestamps.get(blockNumber)
       });
     }
   }
 
-  return events;
+  return events
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+    .slice(0, limit);
 }
 
 async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = null, toBlock = null) {

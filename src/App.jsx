@@ -30,7 +30,7 @@ export default function App() {
   const unsubscribeTicketRef = useRef(() => {});
   const unsubscribeWinnerRef = useRef(() => {});
   const lastObservedTicketsRef = useRef(null);
-  const MAX_FEED_ITEMS = 300;
+  const MAX_FEED_ITEMS = 15;
 
   const formatFeedFromEvents = (events = []) => {
     return events.map((eventItem) => {
