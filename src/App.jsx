@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, fetchTicketStatsSnapshot } from "./utils/ethersUtils";
+import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, fetchTicketStatsSnapshot, getLiveFeedDiagnostics } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -23,6 +23,7 @@ export default function App() {
   const [ticketsBought, setTicketsBought] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
   const [myTickets, setMyTickets] = useState(0); // Initialize as 0, will be updated from contract when wallet is connected
   const [feed, setFeed] = useState([]);
+  const [feedError, setFeedError] = useState("");
   const [winners, setWinners] = useState(null); // Initialize winners state as null when wallet is not connected
   const [walletAddress, setWalletAddress] = useState(null);
   const [signer, setSigner] = useState(null);
@@ -47,6 +48,7 @@ export default function App() {
     const snapshotEvents = Array.isArray(statsSnapshot?.recentEvents) ? statsSnapshot.recentEvents : [];
     const formattedSnapshotFeed = formatFeedFromEvents(snapshotEvents);
     if (formattedSnapshotFeed.length > 0) {
+      setFeedError("");
       setFeed(formattedSnapshotFeed);
       return true;
     }
@@ -55,10 +57,13 @@ export default function App() {
     const formattedRecentFeed = formatFeedFromEvents(recentEvents);
 
     if (formattedRecentFeed.length > 0) {
+      setFeedError("");
       setFeed(formattedRecentFeed);
       return true;
     }
 
+    const diagnostics = await getLiveFeedDiagnostics();
+    setFeedError(diagnostics?.reason || 'No events found and diagnostics unavailable.');
     return false;
   };
   const formatShortAddress = (address) => {
@@ -177,7 +182,9 @@ export default function App() {
           refreshLotteryData(walletAddress).catch(() => {});
         });
 
-        seedFeedFromChain().catch((feedError) => {
+        seedFeedFromChain().catch(async (feedError) => {
+          const diagnostics = await getLiveFeedDiagnostics();
+          setFeedError(feedError?.message || diagnostics?.reason || 'Unable to load Live Feed');
           console.warn("Unable to preload ticket feed:", feedError);
         });
 
@@ -384,7 +391,7 @@ export default function App() {
 
               <div className={styles.sideCard}>
                 <h4 className={styles.sideTitle}>📡 {t("liveFeed", "Live feed:")}</h4>
-                {feed.length > 0 ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>{t("liveFeedWaiting", "No purchase activity yet — live updates will appear here.")}</div>}
+                {feed.length > 0 ? <LiveFeed events={feed} /> : <div className={styles.placeholderText}>{feedError || t("liveFeedWaiting", "No purchase activity yet — live updates will appear here.")}</div>}
               </div>
             </div>
           </div>

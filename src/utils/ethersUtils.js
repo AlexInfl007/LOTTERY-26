@@ -54,6 +54,25 @@ export async function getCurrentProvider() {
   }
 }
 
+
+export async function getLiveFeedDiagnostics() {
+  const provider = getSharedProvider();
+  if (!provider) {
+    return { ok: false, reason: 'Wallet provider is not initialized. Connect wallet first.' };
+  }
+
+  try {
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== 137) {
+      return { ok: false, reason: `Wrong network: ${network.name || network.chainId}. Switch to Polygon Mainnet (137).` };
+    }
+
+    const blockNumber = await provider.getBlockNumber();
+    return { ok: true, reason: `Provider OK. Current block: ${blockNumber}.` };
+  } catch (error) {
+    return { ok: false, reason: `Provider error: ${error?.message || 'unknown error'}` };
+  }
+}
 async function getReadProvider() {
   return await getCurrentProvider();
 }
@@ -201,14 +220,20 @@ export async function watchTicketEvents(onTicketEvent) {
 
 export async function getRecentTicketEvents(limit = 15) {
   const provider = await getReadProvider();
+  if (!provider) {
+    throw new Error('Wallet provider unavailable or wrong network. Connect wallet to Polygon Mainnet.');
+  }
   const currentContract = await getReadContract();
-  if (!provider || !currentContract) return [];
+  if (!currentContract) {
+    throw new Error('Contract unavailable via current wallet provider.');
+  }
 
   const latestBlockNumber = await provider.getBlockNumber();
   const EVENT_BATCH = 50000;
   const events = [];
   const blockTimestamps = new Map();
 
+  let queryFailures = 0;
   for (let startBlock = 0; startBlock <= latestBlockNumber; startBlock += EVENT_BATCH) {
     const endBlock = Math.min(latestBlockNumber, startBlock + EVENT_BATCH - 1);
 
@@ -216,6 +241,7 @@ export async function getRecentTicketEvents(limit = 15) {
     try {
       batch = await currentContract.queryFilter('TicketBought', startBlock, endBlock);
     } catch {
+      queryFailures += 1;
       continue;
     }
 
@@ -242,6 +268,10 @@ export async function getRecentTicketEvents(limit = 15) {
     }
   }
 
+  if (events.length === 0 && queryFailures > 0) {
+    throw new Error('Could not read TicketBought events from chain (queryFilter failed on scanned ranges).');
+  }
+
   return events
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
     .slice(0, limit);
@@ -265,6 +295,7 @@ async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = n
         toBlock: end
       });
     } catch {
+      queryFailures += 1;
       continue;
     }
 
@@ -403,6 +434,7 @@ async function scanPurchasesFromTicketEvents(contract, provider, limit, blocksTo
     try {
       events = await contract.queryFilter('TicketBought', startBlock, endBlock);
     } catch {
+      queryFailures += 1;
       continue;
     }
 
@@ -450,6 +482,7 @@ async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTicke
     try {
       block = await getBlockWithTransactions(provider, blockNumber);
     } catch {
+      queryFailures += 1;
       continue;
     }
     if (!block || !block.transactions?.length) continue;
@@ -614,6 +647,7 @@ async function rebuildTicketHistoryFromLogs() {
         topics: [TICKET_BOUGHT_TOPIC]
       });
     } catch {
+      queryFailures += 1;
       continue;
     }
 

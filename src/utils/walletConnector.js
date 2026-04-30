@@ -378,6 +378,8 @@ export const restoreWalletSession = async () => {
       return null;
     }
 
+    await switchToPolygonNetwork(ethereum);
+
     const provider = new ethers.BrowserProvider(ethereum);
     const signer = await provider.getSigner();
     const signerAddress = await signer.getAddress();
