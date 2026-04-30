@@ -18,6 +18,19 @@ let ticketHistoryCache = {
   perUser: new Map()
 };
 
+
+async function ensureSharedProvider() {
+  let provider = getSharedProvider();
+  if (provider) return provider;
+
+  if (typeof window !== 'undefined' && window.ethereum) {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    setSharedProvider(provider);
+    return provider;
+  }
+
+  return null;
+}
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
 }
@@ -41,12 +54,25 @@ export async function fetchTicketStatsSnapshot(address = null, limit = 50) {
 }
 
 export async function getCurrentProvider() {
-  const provider = getSharedProvider();
+  const provider = await ensureSharedProvider();
   if (!provider) return null;
 
   try {
-    const network = await provider.getNetwork();
-    if (Number(network.chainId) !== 137) return null;
+    let chainId = null;
+
+    try {
+      const network = await provider.getNetwork();
+      chainId = Number(network.chainId);
+    } catch {
+      // fallback below
+    }
+
+    if (!Number.isFinite(chainId)) {
+      const chainIdHex = await provider.send('eth_chainId', []);
+      chainId = Number.parseInt(chainIdHex, 16);
+    }
+
+    if (chainId !== 137) return null;
     await provider.getBlockNumber();
     return provider;
   } catch {
@@ -56,7 +82,7 @@ export async function getCurrentProvider() {
 
 
 export async function getLiveFeedDiagnostics() {
-  const provider = getSharedProvider();
+  const provider = await ensureSharedProvider();
   if (!provider) {
     return { ok: false, reason: 'Wallet provider is not initialized. Connect wallet first.' };
   }
