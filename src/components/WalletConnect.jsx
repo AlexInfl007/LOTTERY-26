@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { ethers } from "ethers";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
 import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
@@ -80,17 +79,6 @@ export default function WalletConnect({ onConnect }) {
             onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
             return;
           }
-
-          setAddress(currentAddress);
-          setConnected(true);
-          if (window.ethereum) {
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
-            updateProvider(provider);
-            updateContractInstance(provider);
-            onConnect && onConnect(currentAddress, provider, signer);
-          }
-          return;
         }
 
         setConnected(false);
@@ -112,18 +100,22 @@ export default function WalletConnect({ onConnect }) {
         return;
       }
 
-      setConnected(true);
-      setAddress(accounts[0]);
       try {
         const restoredSession = await restoreWalletSession();
-        if (restoredSession?.provider && restoredSession?.signer) {
+        if (restoredSession?.provider && restoredSession?.signer && restoredSession?.address) {
+          setConnected(true);
+          setAddress(restoredSession.address);
           updateProvider(restoredSession.provider);
           updateContractInstance(restoredSession.provider);
-          onConnect && onConnect(accounts[0], restoredSession.provider, restoredSession.signer);
+          onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
+          return;
         }
       } catch {
-        // Keep local wallet badge updated even if full session restore fails.
+        // fall through to disconnected state
       }
+
+      setConnected(false);
+      setAddress(null);
     };
 
     const onChainChanged = () => {

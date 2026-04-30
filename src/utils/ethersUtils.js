@@ -18,6 +18,19 @@ let ticketHistoryCache = {
   perUser: new Map()
 };
 
+
+async function ensureSharedProvider() {
+  let provider = getSharedProvider();
+  if (provider) return provider;
+
+  if (typeof window !== 'undefined' && window.ethereum) {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    setSharedProvider(provider);
+    return provider;
+  }
+
+  return null;
+}
 export function updateProvider(newProvider) {
   setSharedProvider(newProvider);
 }
@@ -41,12 +54,25 @@ export async function fetchTicketStatsSnapshot(address = null, limit = 50) {
 }
 
 export async function getCurrentProvider() {
-  const provider = getSharedProvider();
+  const provider = await ensureSharedProvider();
   if (!provider) return null;
 
   try {
-    const network = await provider.getNetwork();
-    if (Number(network.chainId) !== 137) return null;
+    let chainId = null;
+
+    try {
+      const network = await provider.getNetwork();
+      chainId = Number(network.chainId);
+    } catch {
+      // fallback below
+    }
+
+    if (!Number.isFinite(chainId)) {
+      const chainIdHex = await provider.send('eth_chainId', []);
+      chainId = Number.parseInt(chainIdHex, 16);
+    }
+
+    if (chainId !== 137) return null;
     await provider.getBlockNumber();
     return provider;
   } catch {
@@ -54,6 +80,25 @@ export async function getCurrentProvider() {
   }
 }
 
+
+export async function getLiveFeedDiagnostics() {
+  const provider = await ensureSharedProvider();
+  if (!provider) {
+    return { ok: false, reason: 'Wallet provider is not initialized. Connect wallet first.' };
+  }
+
+  try {
+    const network = await provider.getNetwork();
+    if (Number(network.chainId) !== 137) {
+      return { ok: false, reason: `Wrong network: ${network.name || network.chainId}. Switch to Polygon Mainnet (137).` };
+    }
+
+    const blockNumber = await provider.getBlockNumber();
+    return { ok: true, reason: `Provider OK. Current block: ${blockNumber}.` };
+  } catch (error) {
+    return { ok: false, reason: `Provider error: ${error?.message || 'unknown error'}` };
+  }
+}
 async function getReadProvider() {
   return await getCurrentProvider();
 }
@@ -199,72 +244,63 @@ export async function watchTicketEvents(onTicketEvent) {
   };
 }
 
-export async function getRecentTicketEvents(limit = 50) {
+export async function getRecentTicketEvents(limit = 15) {
   const provider = await getReadProvider();
-  if (!provider) return [];
-
-  try {
-    const providerEvents = await fetchTicketEventsFromProvider(provider, limit);
-    if (providerEvents.length > 0) {
-      return providerEvents;
-    }
-  } catch {
-    // Continue with contract scan fallback.
+  if (!provider) {
+    throw new Error('Wallet provider unavailable or wrong network. Connect wallet to Polygon Mainnet.');
+  }
+  const currentContract = await getReadContract();
+  if (!currentContract) {
+    throw new Error('Contract unavailable via current wallet provider.');
   }
 
-  const currentContract = await getReadContract();
-  if (!currentContract) return [];
-
   const latestBlockNumber = await provider.getBlockNumber();
-  const EVENT_BATCH = 3000;
-  const MAX_SCAN_BLOCKS = 250000;
-  const MIN_BLOCK = Math.max(0, latestBlockNumber - MAX_SCAN_BLOCKS);
-  let consecutiveFailures = 0;
+  const EVENT_BATCH = 50000;
   const events = [];
+  const blockTimestamps = new Map();
 
-  for (let endBlock = latestBlockNumber; endBlock >= MIN_BLOCK; endBlock -= EVENT_BATCH) {
-    if (events.length >= limit) break;
-    const startBlock = Math.max(MIN_BLOCK, endBlock - EVENT_BATCH + 1);
+  let queryFailures = 0;
+  for (let startBlock = 0; startBlock <= latestBlockNumber; startBlock += EVENT_BATCH) {
+    const endBlock = Math.min(latestBlockNumber, startBlock + EVENT_BATCH - 1);
 
     let batch = [];
     try {
       batch = await currentContract.queryFilter('TicketBought', startBlock, endBlock);
-      consecutiveFailures = 0;
     } catch {
-      consecutiveFailures += 1;
-      if (consecutiveFailures >= 5) {
-        break;
-      }
+      queryFailures += 1;
       continue;
     }
 
-    for (let i = batch.length - 1; i >= 0; i -= 1) {
-      if (events.length >= limit) break;
-      const ev = batch[i];
+    for (const ev of batch) {
       const buyer = ev?.args?.buyer || null;
       const round = ev?.args?.round !== undefined ? Number(ev.args.round) : null;
       const blockNumber = ev?.blockNumber;
 
-      let timestamp = Date.now();
-      if (typeof blockNumber === 'number') {
+      if (!blockTimestamps.has(blockNumber)) {
         try {
           const block = await provider.getBlock(blockNumber);
-          if (block?.timestamp) timestamp = Number(block.timestamp) * 1000;
+          blockTimestamps.set(blockNumber, block?.timestamp ? Number(block.timestamp) * 1000 : Date.now());
         } catch {
-          // keep fallback timestamp
+          blockTimestamps.set(blockNumber, Date.now());
         }
       }
 
       events.push({
-        id: `${ev?.transactionHash || 'tx'}:${ev?.index ?? i}`,
+        id: `${ev?.transactionHash || 'tx'}:${ev?.index ?? 0}`,
         buyer,
         round,
-        timestamp
+        timestamp: blockTimestamps.get(blockNumber)
       });
     }
   }
 
-  return events;
+  if (events.length === 0 && queryFailures > 0) {
+    throw new Error('Could not read TicketBought events from chain (queryFilter failed on scanned ranges).');
+  }
+
+  return events
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+    .slice(0, limit);
 }
 
 async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = null, toBlock = null) {
@@ -285,6 +321,7 @@ async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = n
         toBlock: end
       });
     } catch {
+      queryFailures += 1;
       continue;
     }
 
@@ -423,6 +460,7 @@ async function scanPurchasesFromTicketEvents(contract, provider, limit, blocksTo
     try {
       events = await contract.queryFilter('TicketBought', startBlock, endBlock);
     } catch {
+      queryFailures += 1;
       continue;
     }
 
@@ -470,6 +508,7 @@ async function scanPurchasesFromBlocks(provider, limit, blocksToScan, totalTicke
     try {
       block = await getBlockWithTransactions(provider, blockNumber);
     } catch {
+      queryFailures += 1;
       continue;
     }
     if (!block || !block.transactions?.length) continue;
@@ -634,6 +673,7 @@ async function rebuildTicketHistoryFromLogs() {
         topics: [TICKET_BOUGHT_TOPIC]
       });
     } catch {
+      queryFailures += 1;
       continue;
     }
 

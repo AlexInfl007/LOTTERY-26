@@ -10,7 +10,7 @@ const POLYGON_MAINNET_CONFIG = {
     symbol: 'POL',
     decimals: 18
   },
-  rpcUrls: ['https://polygon-rpc.com/', 'https://rpc-mainnet.matic.network'],
+  rpcUrls: ['https://polygon-bor-rpc.publicnode.com', 'https://rpc.ankr.com/polygon'],
   blockExplorerUrls: ['https://polygonscan.com/']
 };
 
@@ -377,6 +377,8 @@ export const restoreWalletSession = async () => {
     if (!accounts || accounts.length === 0) {
       return null;
     }
+
+    await switchToPolygonNetwork(ethereum);
 
     const provider = new ethers.BrowserProvider(ethereum);
     const signer = await provider.getSigner();
