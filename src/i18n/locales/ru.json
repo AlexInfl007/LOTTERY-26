@@ -65,10 +65,10 @@
     "ticketPurchased": "Внесено 30 POL в контракт (куплен билет)"
   },
   "liveFeed": "Live feed:",
-  "ticketsBought": "Всего билетов",
+  "ticketsBought": "Билетов в текущем раунде",
   "collectingTo": "Собираем пул до",
   "eachTicketIncreases": "Каждый билет увеличивает джекпот.",
-  "myTickets": "Мои билеты",
+  "myTickets": "Мои билеты в этом раунде",
   "recentWinners": "Последние победители",
   "winnersSubtitle": "История побед будет отображаться здесь",
   "winnerPending": "В ожидании первого победителя",
@@ -178,8 +178,7 @@
         "a": "Вы участвуете сразу; шансы одинаковы для всех билетов текущего раунда."
       }
     ]
-  }
-,
+  },
   "seo": {
     "homeTitle": "Seren Lottery Chain — ончейн-лотерея Polygon с проверяемой случайностью",
     "homeDescription": "Seren Lottery Chain — прозрачная ончейн-лотерея в сети Polygon с Chainlink VRF, публичной проверкой смарт-контракта и живым интерфейсом джекпота.",

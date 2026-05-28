@@ -68,10 +68,10 @@
     "ticketPurchased": "New ticket purchased"
   },
   "liveFeed": "Live feed:",
-  "ticketsBought": "tickets bought",
+  "ticketsBought": "tickets in current round",
   "collectingTo": "Collecting pool to",
   "eachTicketIncreases": "Each ticket increases the jackpot.",
-  "myTickets": "My tickets",
+  "myTickets": "My tickets in this round",
   "recentWinners": "Recent winners",
   "winnersSubtitle": "Winner history will appear here",
   "winnerPending": "Waiting for the first winner",
@@ -181,8 +181,7 @@
         "a": "You are in immediately; odds are equal for all tickets of this round."
       }
     ]
-  }
-,
+  },
   "seo": {
     "homeTitle": "Seren Lottery Chain — On-chain Polygon lottery with verifiable randomness",
     "homeDescription": "Seren Lottery Chain is a transparent on-chain Polygon lottery with Chainlink VRF, public smart-contract verification, and a live jackpot interface.",

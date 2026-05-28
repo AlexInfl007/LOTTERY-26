@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import PoolProgressBar from "./components/PoolProgressBar";
@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, watchTicketEvents, buyTicket, getUserTickets, getRecentWinners, watchWinnerEvents, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, fetchTicketStatsSnapshot, getLiveFeedDiagnostics } from "./utils/ethersUtils";
+import { readPrizePool, buyTicket, getUserTickets, getRecentWinners, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, getLiveFeedDiagnostics } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -28,9 +28,6 @@ export default function App() {
   const [walletAddress, setWalletAddress] = useState(null);
   const [signer, setSigner] = useState(null);
   const [loading, setLoading] = useState(true);
-  const unsubscribeTicketRef = useRef(() => {});
-  const unsubscribeWinnerRef = useRef(() => {});
-  const lastObservedTicketsRef = useRef(null);
   const MAX_FEED_ITEMS = 15;
 
   const formatFeedFromEvents = (events = []) => {
@@ -44,15 +41,6 @@ export default function App() {
   };
 
   const seedFeedFromChain = async () => {
-    const statsSnapshot = await fetchTicketStatsSnapshot(walletAddress, MAX_FEED_ITEMS);
-    const snapshotEvents = Array.isArray(statsSnapshot?.recentEvents) ? statsSnapshot.recentEvents : [];
-    const formattedSnapshotFeed = formatFeedFromEvents(snapshotEvents);
-    if (formattedSnapshotFeed.length > 0) {
-      setFeedError("");
-      setFeed(formattedSnapshotFeed);
-      return true;
-    }
-
     const recentEvents = await getRecentTicketEvents(MAX_FEED_ITEMS);
     const formattedRecentFeed = formatFeedFromEvents(recentEvents);
 
@@ -72,44 +60,31 @@ export default function App() {
   };
 
   const refreshLotteryData = async (address = walletAddress) => {
+    if (!address) {
+      setPoolAmount(null);
+      setTicketsBought(null);
+      setMyTickets(0);
+      return;
+    }
+
     const updatedPool = await readPrizePool();
     if (typeof updatedPool === 'number') {
       setPoolAmount(updatedPool);
     }
 
-    const statsSnapshot = await fetchTicketStatsSnapshot(address, 60);
-    if (statsSnapshot) {
-      const totalFromSnapshot = Number(statsSnapshot.totalTickets);
-      if (Number.isFinite(totalFromSnapshot) && totalFromSnapshot >= 0) {
-        setTicketsBought(totalFromSnapshot);
-        lastObservedTicketsRef.current = totalFromSnapshot;
-      }
-
-      if (address) {
-        const mineFromSnapshot = Number(statsSnapshot.myTickets);
-        if (Number.isFinite(mineFromSnapshot) && mineFromSnapshot >= 0) {
-          setMyTickets(mineFromSnapshot);
-        }
-      }
-    }
-
     const updatedTicketsCount = await getTicketsCount();
     if (typeof updatedTicketsCount === 'number' && updatedTicketsCount >= 0) {
       setTicketsBought(updatedTicketsCount);
-      lastObservedTicketsRef.current = updatedTicketsCount;
     } else if (typeof updatedPool === "number" && updatedPool > 0) {
       const poolDerivedTickets = Math.floor(updatedPool / 30);
       if (poolDerivedTickets > 0) {
         setTicketsBought(poolDerivedTickets);
-        lastObservedTicketsRef.current = poolDerivedTickets;
       }
     }
 
-    if (address) {
-      const updatedUserTickets = await getUserTickets(address);
-      if (typeof updatedUserTickets === 'number') {
-        setMyTickets(updatedUserTickets);
-      }
+    const updatedUserTickets = await getUserTickets(address);
+    if (typeof updatedUserTickets === 'number') {
+      setMyTickets(updatedUserTickets);
     }
   };
 
@@ -144,57 +119,34 @@ export default function App() {
     });
   }, [isAboutPage, t, i18n.language]);
 
-  // Initialize data from smart contract when wallet is connected
+  // Load contract data once when a wallet is connected or the page is reloaded.
   useEffect(() => {
     let mounted = true;
-    
+
     const initializeData = async () => {
       try {
         if (!mounted) return;
-        
-        // Get initial pool amount from contract
+
+        if (!walletAddress) {
+          setFeed([]);
+          setFeedError(t("connectWalletForLiveFeed", "Connect your wallet to load Live Feed from your wallet provider."));
+          setWinners([]);
+          setLoading(false);
+          return;
+        }
+
         await refreshLotteryData(walletAddress);
 
-        // Get recent winners from contract
         const recentWinners = await getRecentWinners();
-        setWinners(recentWinners);
-        
-        unsubscribeTicketRef.current = await watchTicketEvents((ticketEvent) => {
-          const shortAddress = formatShortAddress(ticketEvent?.buyer);
-          const round = Number.isFinite(ticketEvent?.round) ? ticketEvent.round : "?";
-          const timestamp = ticketEvent?.timestamp ? new Date(ticketEvent.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-          const nextMessage = `${t('events.ticketPurchased', 'New ticket purchased')} (30 POL) • ${shortAddress} • Round ${round} • ${timestamp}`;
-          if (nextMessage) {
-            setFeed(prev => [nextMessage, ...prev].slice(0, MAX_FEED_ITEMS));
-          }
+        if (mounted) {
+          setWinners(recentWinners);
+        }
 
-          if (typeof ticketEvent?.ticketsCount === 'number') {
-            setTicketsBought(ticketEvent.ticketsCount);
-            lastObservedTicketsRef.current = ticketEvent.ticketsCount;
-          } else {
-            setTicketsBought(t => (typeof t === 'number' ? t + 1 : 1));
-          }
-
-          if (walletAddress && ticketEvent?.buyer && walletAddress.toLowerCase() === ticketEvent.buyer.toLowerCase()) {
-            setMyTickets((count) => count + 1);
-          }
-
-          refreshLotteryData(walletAddress).catch(() => {});
-        });
-
-        seedFeedFromChain().catch(async (feedError) => {
-          const diagnostics = await getLiveFeedDiagnostics();
-          setFeedError(feedError?.message || diagnostics?.reason || 'Unable to load Live Feed');
-          console.warn("Unable to preload ticket feed:", feedError);
-        });
-
-        unsubscribeWinnerRef.current = watchWinnerEvents && typeof watchWinnerEvents === 'function'
-          ? await watchWinnerEvents((winnerData) => {
-              setWinners(prev => [winnerData, ...prev].slice(0, 15));
-            })
-          : () => {};
+        await seedFeedFromChain();
       } catch (error) {
-        console.error("Error initializing data:", error);
+        const diagnostics = await getLiveFeedDiagnostics();
+        setFeedError(error?.message || diagnostics?.reason || 'Unable to load Live Feed');
+        console.error("Error initializing lottery data:", error);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -203,58 +155,13 @@ export default function App() {
     };
 
     initializeData();
-    
+
     return () => {
       mounted = false;
-      unsubscribeTicketRef.current();
-      unsubscribeWinnerRef.current();
     };
   }, [walletAddress, t]);
 
-  // Periodically update the prize pool to reflect new contributions when wallet is connected
-  useEffect(() => {
-    let intervalId;
-    
-    const updatePool = async () => {
-      try {
-        await refreshLotteryData(walletAddress);
-      } catch (error) {
-        console.error("Error updating prize pool:", error);
-      }
-    };
-    
-    // Using a recursive setTimeout pattern instead of setInterval to avoid CSP issues
-    const scheduleUpdate = () => {
-      intervalId = setTimeout(async () => {
-        await updatePool();
-        scheduleUpdate(); // Schedule the next update
-      }, 30000); // Update every 30 seconds
-    };
-    
-    scheduleUpdate();
 
-    return () => {
-      if (intervalId) {
-        clearTimeout(intervalId);
-      }
-    };
-  }, [walletAddress, t]);
-
-  // Update user's tickets when wallet connects
-  useEffect(() => {
-    const fetchUserTickets = async () => {
-      if (walletAddress) {
-        try {
-          const userTickets = await getUserTickets(walletAddress);
-          setMyTickets(userTickets);
-        } catch (error) {
-          console.error("Error fetching user tickets:", error);
-        }
-      }
-    };
-
-    fetchUserTickets();
-  }, [walletAddress]);
 
   const handleParticipate = async () => {
     if (!signer) {
