@@ -3,10 +3,11 @@ import { getContractAsync, initializeContract, getContractWithSigner } from '../
 import { getSharedProvider, setSharedProvider } from './providerStore';
 import { CONTRACT_ABI, CONTRACT_ADDRESS } from './contract';
 
-export const SUPPORTS_TICKET_EVENTS = false;
+export const SUPPORTS_TICKET_EVENTS = true;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
 const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const POLYGON_CHAIN_ID = 137;
+const MIN_LOG_FALLBACK_RANGE = 100;
 let deploymentBlockCache = null;
 
 
@@ -136,17 +137,7 @@ async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = n
 
   for (let end = latestBlock; end >= minBlock && events.length < limit; end -= batchSize) {
     const start = Math.max(minBlock, end - batchSize + 1);
-    let logs = [];
-    try {
-      logs = await provider.getLogs({
-        address: CONTRACT_ADDRESS,
-        topics: [TICKET_BOUGHT_TOPIC],
-        fromBlock: start,
-        toBlock: end
-      });
-    } catch {
-      continue;
-    }
+    const logs = await getTicketLogsWithRangeFallback(provider, start, end);
 
     for (let i = logs.length - 1; i >= 0 && events.length < limit; i -= 1) {
       const parsed = parseTicketBoughtLog(logs[i], i);
@@ -170,6 +161,25 @@ async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = n
   }
 
   return events;
+}
+
+async function getTicketLogsWithRangeFallback(provider, fromBlock, toBlock) {
+  try {
+    return await provider.getLogs({
+      address: CONTRACT_ADDRESS,
+      topics: [TICKET_BOUGHT_TOPIC],
+      fromBlock,
+      toBlock
+    });
+  } catch {
+    if (toBlock <= fromBlock || toBlock - fromBlock < MIN_LOG_FALLBACK_RANGE) return [];
+
+    const midBlock = Math.floor((fromBlock + toBlock) / 2);
+    const olderLogs = await getTicketLogsWithRangeFallback(provider, fromBlock, midBlock);
+    const newerLogs = await getTicketLogsWithRangeFallback(provider, midBlock + 1, toBlock);
+
+    return [...olderLogs, ...newerLogs];
+  }
 }
 
 function parseTicketBoughtLog(log, index = 0) {
