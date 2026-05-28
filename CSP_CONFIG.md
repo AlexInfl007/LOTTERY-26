@@ -80,13 +80,13 @@ The CSP configuration supports the following Web3 wallet providers:
 - **Infura**: https://*.infura.io
 - **Alchemy**: https://*.alchemyapi.io, https://*.alchemy.com
 - **Chainlink**: https://*.chain.link
-- **Polygon Network**: https://*.polygon-rpc.com, https://*.matic.network
+- **Polygon Explorer**: https://api.polygonscan.com
 
 ## Blockchain RPC Endpoints
 
 The configuration includes support for major blockchain networks:
 
-- **Polygon**: polygon-rpc.com, api.polygonscan.com, rpc-mumbai.maticvigil.com
+- **Polygon**: api.polygonscan.com
 - **Ethereum**: api.etherscan.io
 - **Binance Smart Chain**: *.binance.org, *.okex.org
 - **All HTTPS and WSS connections** for flexibility with new networks
