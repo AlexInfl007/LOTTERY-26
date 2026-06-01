@@ -52,7 +52,7 @@ export default function App() {
     }
 
     const diagnostics = await getLiveFeedDiagnostics();
-    setFeedError(diagnostics?.reason || 'No events found and diagnostics unavailable.');
+    setFeedError(diagnostics?.ok ? t('liveFeedNoPurchases', 'Нет покупок') : diagnostics?.reason || t('liveFeedNoPurchases', 'Нет покупок'));
     return false;
   };
   const formatShortAddress = (address) => {
@@ -131,18 +131,6 @@ export default function App() {
         if (!mounted) return;
 
         await refreshLotteryData(walletAddress);
-
-        getRecentWinners()
-          .then((recentWinners) => {
-            if (mounted) {
-              setWinners(recentWinners);
-            }
-          })
-          .catch(() => {
-            if (mounted) {
-              setWinners([]);
-            }
-          });
 
         await seedFeedFromChain();
       } catch (error) {
