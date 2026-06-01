@@ -18,8 +18,7 @@ import {
   getUserTickets, 
   getTicketsCount, 
   getRecentTicketEvents,
-  getCurrentRound,
-  initializeWithSigner 
+  getCurrentRound
 } from "./utils/ethersUtils";
 
 export default function App() {
@@ -198,9 +197,6 @@ export default function App() {
   const onWalletConnect = async (address, web3Provider, signer) => {
     setWalletAddress(address);
     setSigner(signer);
-    
-    // Initialize ethersUtils with the signer for contract interactions
-    initializeWithSigner(signer);
   };
 
   // Handle wallet disconnect
@@ -212,7 +208,6 @@ export default function App() {
     setMyTickets(null);
     setFeed([]);
     setFeedError("");
-    initializeWithSigner(null);
   };
 
   return (

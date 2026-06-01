@@ -1,7 +1,6 @@
 import { ethers } from 'ethers';
-import { getContractWithSigner } from '../../utils/contractManager';
-import { getSharedProvider, setSharedProvider } from './providerStore';
-import { CONTRACT_ABI, CONTRACT_ADDRESS } from './contract';
+import { getContract, initializeContract as initContractManager, clearContract } from '../../utils/contractManager';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from './contract';
 
 export const SUPPORTS_TICKET_EVENTS = true;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
@@ -9,28 +8,48 @@ export const SUPPORTS_HISTORICAL_WINNERS = false;
 const POLYGON_CHAIN_ID = 137;
 const TICKET_PRICE_POL = 30;
 
-// Module-level state for signer and contract with signer
-let currentSigner = null;
-let contractWithSigner = null;
+// Module-level state for provider (singleton)
+let sharedProvider = null;
+
+/**
+ * Set the shared provider after wallet connection.
+ * This must be called AFTER the user connects their wallet.
+ */
+export function setSharedProvider(provider) {
+  sharedProvider = provider;
+}
+
+/**
+ * Get the shared provider (only available after wallet connection)
+ */
+export function getSharedProvider() {
+  return sharedProvider;
+}
+
+/**
+ * Clear shared provider on wallet disconnect
+ */
+export function clearSharedProvider() {
+  sharedProvider = null;
+}
 
 /**
  * Initialize the module with a signer after wallet connection.
  * This must be called AFTER the user connects their wallet.
  */
-export function initializeWithSigner(signer) {
-  currentSigner = signer;
-  if (signer) {
-    contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-  } else {
-    contractWithSigner = null;
+export function initializeWithSigner(signer, provider) {
+  if (provider) {
+    setSharedProvider(provider);
   }
+  initContractManager(signer);
 }
 
 /**
- * Get the current signer (only available after wallet connection)
+ * Get the current signer from contract instance (only available after wallet connection)
  */
 export function getCurrentSigner() {
-  return currentSigner;
+  const contract = getContract();
+  return contract?.signer || null;
 }
 
 /**
@@ -193,7 +212,15 @@ export async function watchPrizePoolUpdates() {
 
 export async function buyTicket(signer) {
   try {
-    const contractWithSigner = await getContractWithSigner(signer);
+    if (!signer) {
+      throw new Error('Wallet not connected');
+    }
+    
+    const contract = getContract();
+    if (!contract || !contract.signer) {
+      throw new Error('Contract not initialized. Please reconnect wallet.');
+    }
+    
     const userAddress = await signer.getAddress();
     const userBalance = await signer.provider.getBalance(userAddress);
     const ticketPrice = ethers.parseEther(String(TICKET_PRICE_POL));
@@ -203,13 +230,13 @@ export async function buyTicket(signer) {
     }
 
     let tx;
-    if (typeof contractWithSigner.buyTicket === 'function') {
-      tx = await contractWithSigner.buyTicket({
+    if (typeof contract.buyTicket === 'function') {
+      tx = await contract.buyTicket({
         value: ticketPrice,
         gasLimit: 500000
       });
-    } else if (typeof contractWithSigner.enterRaffle === 'function') {
-      tx = await contractWithSigner.enterRaffle({
+    } else if (typeof contract.enterRaffle === 'function') {
+      tx = await contract.enterRaffle({
         value: ticketPrice,
         gasLimit: 500000
       });
