@@ -9,71 +9,63 @@ export const SUPPORTS_HISTORICAL_WINNERS = false;
 const POLYGON_CHAIN_ID = 137;
 const TICKET_PRICE_POL = 30;
 
-async function ensureSharedProvider() {
-  const existingProvider = getSharedProvider();
-  if (existingProvider) return existingProvider;
+// Module-level state for signer and contract with signer
+let currentSigner = null;
+let contractWithSigner = null;
 
-  return null;
+/**
+ * Initialize the module with a signer after wallet connection.
+ * This must be called AFTER the user connects their wallet.
+ */
+export function initializeWithSigner(signer) {
+  currentSigner = signer;
+  if (signer) {
+    contractWithSigner = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+  } else {
+    contractWithSigner = null;
+  }
 }
 
-export function updateProvider(newProvider) {
-  setSharedProvider(newProvider);
+/**
+ * Get the current signer (only available after wallet connection)
+ */
+export function getCurrentSigner() {
+  return currentSigner;
 }
 
-export function updateContractInstance(newProvider) {
-  setSharedProvider(newProvider);
-}
-
-export async function getCurrentProvider() {
-  const provider = await ensureSharedProvider();
+/**
+ * Get a read-only contract instance using the shared provider.
+ * Returns null if no provider is available or wrong network.
+ */
+async function getReadContract() {
+  const provider = getSharedProvider();
   if (!provider) return null;
 
   try {
-    const chainIdHex = await provider.send('eth_chainId', []);
-    const chainId = Number.parseInt(chainIdHex, 16);
+    const network = await provider.getNetwork();
+    const chainId = Number(network.chainId);
     if (chainId !== POLYGON_CHAIN_ID) return null;
-
-    return provider;
+    
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+    return addGetPastEvents(contract);
   } catch {
     return null;
   }
 }
 
-export async function getLiveFeedDiagnostics() {
-  const provider = await ensureSharedProvider();
-  if (!provider) {
-    return { ok: false, reason: 'Connect wallet to load TicketBought events.' };
-  }
-
-  try {
-    const chainIdHex = await provider.send('eth_chainId', []);
-    const chainId = Number.parseInt(chainIdHex, 16);
-    if (chainId !== POLYGON_CHAIN_ID) {
-      return { ok: false, reason: `Wrong network. Switch wallet to Polygon Mainnet (${POLYGON_CHAIN_ID}).` };
-    }
-
-    return { ok: true, reason: 'Wallet provider is ready.' };
-  } catch (error) {
-    return { ok: false, reason: `Wallet provider error: ${error?.message || 'unknown error'}` };
-  }
-}
-
-async function getReadContract() {
-  const provider = await getCurrentProvider();
-  if (!provider) return null;
-
-  return addGetPastEvents(new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider));
-}
-
-
 function addGetPastEvents(contract) {
   if (typeof contract.getPastEvents === 'function') return contract;
 
-  contract.getPastEvents = async (eventName, options = {}) => contract.queryFilter(
-    contract.filters[eventName](),
-    options.fromBlock ?? 0,
-    options.toBlock ?? 'latest'
-  );
+  // ethers v6 uses queryFilter differently - we need to use the filter approach
+  contract.getPastEvents = async (eventName, options = {}) => {
+    const filter = contract.filters[eventName]();
+    if (!filter) {
+      throw new Error(`Event ${eventName} not found in contract ABI`);
+    }
+    const fromBlock = options.fromBlock ?? 0;
+    const toBlock = options.toBlock ?? 'latest';
+    return contract.queryFilter(filter, fromBlock, toBlock);
+  };
 
   return contract;
 }
@@ -154,10 +146,13 @@ export async function readPrizePool() {
 }
 
 export async function getRecentTicketEvents(limit = 15) {
-  const provider = await getCurrentProvider();
+  // Only load events if we have a provider (wallet connected)
+  const provider = getSharedProvider();
   const contract = await getReadContract();
+  
   if (!provider || !contract) {
-    throw new Error('Connect wallet to load TicketBought events.');
+    // Return empty array instead of throwing - no wallet connected yet
+    return [];
   }
 
   const normalizedLimit = Math.max(1, Math.min(Number(limit) || 15, 50));
@@ -179,7 +174,8 @@ export async function getRecentTicketEvents(limit = 15) {
 
     return eventsWithTimestamps;
   } catch (error) {
-    throw new Error(error?.message || 'Unable to load TicketBought events from wallet provider.');
+    console.error('Error loading ticket events:', error);
+    return [];
   }
 }
 

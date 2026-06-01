@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import styles from "../styles/Home.module.css";
 import { useTranslation } from "react-i18next";
-import { updateProvider, updateContractInstance } from '../utils/ethersUtils';
-import { connectWallet, isWalletConnected, getCurrentWalletAddress, getAvailableWallets, restoreWalletSession } from '../utils/walletConnector';
+import { initializeWithSigner } from '../utils/ethersUtils';
+import { connectWallet, isWalletConnected, getCurrentWalletAddress, getAvailableWallets, restoreWalletSession, disconnectWallet } from '../utils/walletConnector';
 
 const MOBILE_WALLET_LINKS = [
   { key: 'metamask-mobile', icon: '🦊', name: 'MetaMask', getUrl: (dappUrl) => `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}` },
@@ -65,6 +65,8 @@ export default function WalletConnect({ onConnect }) {
           setAddress(restoredSession.address);
           setConnected(true);
           onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
+          // Initialize ethersUtils with the signer
+          initializeWithSigner(restoredSession.signer);
           return;
         }
 
@@ -74,8 +76,8 @@ export default function WalletConnect({ onConnect }) {
           if (restoredSession?.address) {
             setAddress(restoredSession.address);
             setConnected(true);
-            updateProvider(restoredSession.provider);
-            updateContractInstance(restoredSession.provider);
+            // Initialize ethersUtils with the signer
+            initializeWithSigner(restoredSession.signer);
             onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
             return;
           }
@@ -97,6 +99,7 @@ export default function WalletConnect({ onConnect }) {
       if (!accounts || accounts.length === 0) {
         setConnected(false);
         setAddress(null);
+        initializeWithSigner(null);
         return;
       }
 
@@ -105,8 +108,8 @@ export default function WalletConnect({ onConnect }) {
         if (restoredSession?.provider && restoredSession?.signer && restoredSession?.address) {
           setConnected(true);
           setAddress(restoredSession.address);
-          updateProvider(restoredSession.provider);
-          updateContractInstance(restoredSession.provider);
+          // Initialize ethersUtils with the signer
+          initializeWithSigner(restoredSession.signer);
           onConnect && onConnect(restoredSession.address, restoredSession.provider, restoredSession.signer);
           return;
         }
@@ -116,6 +119,7 @@ export default function WalletConnect({ onConnect }) {
 
       setConnected(false);
       setAddress(null);
+      initializeWithSigner(null);
     };
 
     const onChainChanged = () => {
@@ -151,8 +155,8 @@ export default function WalletConnect({ onConnect }) {
       setConnected(true);
       setShowWalletModal(false);
 
-      updateProvider(connectionResult.provider);
-      updateContractInstance(connectionResult.provider);
+      // Initialize ethersUtils with the signer
+      initializeWithSigner(connectionResult.signer);
 
       onConnect && onConnect(connectionResult.address, connectionResult.provider, connectionResult.signer);
     } catch (error) {
@@ -171,10 +175,20 @@ export default function WalletConnect({ onConnect }) {
     setShowWalletModal(true);
   };
 
+  const onDisconnect = async () => {
+    await disconnectWallet();
+    setConnected(false);
+    setAddress(null);
+    // Notify parent component about disconnect so it can clear state
+    if (onConnect) {
+      onConnect(null, null, null);
+    }
+  };
+
   return (
     <>
       <button
-        onClick={openWalletSelector}
+        onClick={connected ? onDisconnect : openWalletSelector}
         className={styles.connectButton}
         disabled={checkingWallet}
       >

@@ -366,6 +366,8 @@ export const disconnectWallet = async () => {
       // Ignore storage failures
     }
   }
+  // Clear the shared provider
+  setSharedProvider(null);
   return true;
 };
 
