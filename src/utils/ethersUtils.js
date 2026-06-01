@@ -8,11 +8,12 @@ export const SUPPORTS_HISTORICAL_WINNERS = false;
 const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const POLYGON_CHAIN_ID = 137;
 const MIN_LOG_FALLBACK_RANGE = 500;
-const LOG_QUERY_BATCH_SIZE = 10000;
-const MAX_HISTORY_BLOCKS = 6000000;
-const CONTRACT_DEPLOYMENT_FLOOR_BLOCK = 74000000;
+const LOG_QUERY_BATCH_SIZE = 50000;
+const CONTRACT_EVENT_START_BLOCK = 85313161;
+const READONLY_RPC_URL = 'https://polygon-bor-rpc.publicnode.com';
 const LOTTERY_INTERFACE = new ethers.Interface(CONTRACT_ABI);
 
+let readonlyProvider = null;
 
 async function ensureSharedProvider() {
   let provider = getSharedProvider();
@@ -81,7 +82,18 @@ export async function getLiveFeedDiagnostics() {
   }
 }
 async function getReadProvider() {
-  return await getCurrentProvider();
+  const walletProvider = await getCurrentProvider();
+  if (walletProvider) return walletProvider;
+
+  if (!readonlyProvider) {
+    readonlyProvider = new ethers.JsonRpcProvider(
+      READONLY_RPC_URL,
+      { chainId: POLYGON_CHAIN_ID, name: 'polygon' },
+      { staticNetwork: true }
+    );
+  }
+
+  return readonlyProvider;
 }
 
 async function getReadContract() {
@@ -201,9 +213,9 @@ function parseTicketBoughtLog(log, index = 0) {
 }
 
 function getHistoryStartBlock(latestBlock) {
-  if (!Number.isFinite(latestBlock)) return CONTRACT_DEPLOYMENT_FLOOR_BLOCK;
+  if (!Number.isFinite(latestBlock)) return CONTRACT_EVENT_START_BLOCK;
 
-  return Math.max(CONTRACT_DEPLOYMENT_FLOOR_BLOCK, latestBlock - MAX_HISTORY_BLOCKS);
+  return Math.min(CONTRACT_EVENT_START_BLOCK, latestBlock);
 }
 
 async function readContractValue(functionName, args = []) {
@@ -299,33 +311,34 @@ export async function buyTicket(signer) {
 }
 
 export async function getUserTickets(walletAddress) {
-  if (!walletAddress) return 0;
+  if (!walletAddress) return null;
 
   const ticketCount = await readContractValue('ticketsOf', [walletAddress]);
-  const directValue = Number(ticketCount || 0n);
-  return Number.isFinite(directValue) && directValue >= 0 ? directValue : 0;
+  if (ticketCount === null) return null;
+
+  const directValue = Number(ticketCount);
+  return Number.isFinite(directValue) && directValue >= 0 ? directValue : null;
 }
 
 
 export async function getCurrentRound() {
   const raw = await readContractValue('round');
-  const round = Number(raw || 0n);
+  if (raw === null) return null;
+
+  const round = Number(raw);
   return Number.isFinite(round) && round > 0 ? round : null;
 }
 
 export async function getTicketsCount() {
   const raw = await readContractValue('ticketsCount');
-  const directValue = Number(raw || 0n);
-  if (Number.isFinite(directValue) && directValue >= 0) return directValue;
-
   const pool = await readContractValue('prizePool');
   const price = await readContractValue('ticketPrice');
-  if (pool !== null && price !== null && price > 0n) {
-    const derivedValue = Number(pool / price);
-    return Number.isFinite(derivedValue) && derivedValue >= 0 ? derivedValue : null;
-  }
 
-  return null;
+  const directValue = raw !== null ? Number(raw) : null;
+  const derivedValue = pool !== null && price !== null && price > 0n ? Number(pool / price) : null;
+
+  const validValues = [directValue, derivedValue].filter((value) => Number.isFinite(value) && value >= 0);
+  return validValues.length > 0 ? Math.max(...validValues) : null;
 }
 
 export async function getRecentWinners() {

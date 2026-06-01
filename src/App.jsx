@@ -61,14 +61,6 @@ export default function App() {
   };
 
   const refreshLotteryData = async (address = walletAddress) => {
-    if (!address) {
-      setPoolAmount(null);
-      setTicketsBought(null);
-      setCurrentRound(null);
-      setMyTickets(0);
-      return;
-    }
-
     const updatedPool = await readPrizePool();
     if (typeof updatedPool === 'number') {
       setPoolAmount(updatedPool);
@@ -89,9 +81,13 @@ export default function App() {
       }
     }
 
-    const updatedUserTickets = await getUserTickets(address);
-    if (typeof updatedUserTickets === 'number') {
-      setMyTickets(updatedUserTickets);
+    if (address) {
+      const updatedUserTickets = await getUserTickets(address);
+      if (typeof updatedUserTickets === 'number') {
+        setMyTickets(updatedUserTickets);
+      }
+    } else {
+      setMyTickets(null);
     }
   };
 
@@ -134,20 +130,19 @@ export default function App() {
       try {
         if (!mounted) return;
 
-        if (!walletAddress) {
-          setFeed([]);
-          setFeedError(t("connectWalletForLiveFeed", "Connect your wallet to load Live Feed from your wallet provider."));
-          setWinners([]);
-          setLoading(false);
-          return;
-        }
-
         await refreshLotteryData(walletAddress);
 
-        const recentWinners = await getRecentWinners();
-        if (mounted) {
-          setWinners(recentWinners);
-        }
+        getRecentWinners()
+          .then((recentWinners) => {
+            if (mounted) {
+              setWinners(recentWinners);
+            }
+          })
+          .catch(() => {
+            if (mounted) {
+              setWinners([]);
+            }
+          });
 
         await seedFeedFromChain();
       } catch (error) {
@@ -294,7 +289,7 @@ export default function App() {
                   <LuckyButton />
                 </div>
 
-                <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {!walletAddress ? '*' : myTickets}</div>
+                <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {walletAddress && myTickets !== null ? myTickets : '*'}</div>
               </section>
 
               <HowItWorks onReadMore={openAboutPage} />
