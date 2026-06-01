@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
-import { initializeContract } from '../../utils/contractManager';
-import { setSharedProvider } from './providerStore';
+import { initializeContract, clearContract } from '../../utils/contractManager';
+import { setSharedProvider, clearSharedProvider } from './ethersUtils';
 
 const POLYGON_CHAIN_ID_HEX = '0x89';
 
@@ -281,7 +281,7 @@ export const connectWallet = async (selectedWalletType = null) => {
     }
 
     setSharedProvider(provider);
-    await initializeContract();
+    initializeContract(signer);
 
     if (selectedWalletType) {
       safeWriteStorage('selectedWalletType', selectedWalletType);
@@ -344,7 +344,7 @@ export const restoreWalletSession = async () => {
     }
 
     setSharedProvider(provider);
-    await initializeContract();
+    initializeContract(signer);
 
     return {
       address: accounts[0],
@@ -366,6 +366,9 @@ export const disconnectWallet = async () => {
       // Ignore storage failures
     }
   }
+  // Clear the shared provider and contract
+  clearSharedProvider();
+  clearContract();
   return true;
 };
 
@@ -381,11 +384,8 @@ export const isWalletConnected = async () => {
     const accounts = await ethereum.request({ method: 'eth_accounts' });
     if (!accounts || accounts.length === 0) return false;
 
-    const provider = new ethers.BrowserProvider(ethereum);
-    const signer = await provider.getSigner();
-    const signerAddress = await signer.getAddress();
-
-    return Boolean(signerAddress && signerAddress.toLowerCase() === accounts[0].toLowerCase());
+    // We have accounts, wallet is connected
+    return true;
   } catch {
     return false;
   }
@@ -403,13 +403,7 @@ export const getCurrentWalletAddress = async () => {
     const accounts = await ethereum.request({ method: 'eth_accounts' });
     if (!accounts || accounts.length === 0) return null;
 
-    const provider = new ethers.BrowserProvider(ethereum);
-    const signer = await provider.getSigner();
-    const signerAddress = await signer.getAddress();
-
-    return signerAddress && signerAddress.toLowerCase() === accounts[0].toLowerCase()
-      ? accounts[0]
-      : null;
+    return accounts[0];
   } catch {
     return null;
   }
