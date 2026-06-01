@@ -7,8 +7,11 @@ export const SUPPORTS_TICKET_EVENTS = true;
 export const SUPPORTS_HISTORICAL_WINNERS = false;
 const TICKET_BOUGHT_TOPIC = ethers.id('TicketBought(address,uint256)');
 const POLYGON_CHAIN_ID = 137;
-const MIN_LOG_FALLBACK_RANGE = 100;
-let deploymentBlockCache = null;
+const MIN_LOG_FALLBACK_RANGE = 500;
+const LOG_QUERY_BATCH_SIZE = 10000;
+const MAX_HISTORY_BLOCKS = 6000000;
+const CONTRACT_DEPLOYMENT_FLOOR_BLOCK = 74000000;
+const LOTTERY_INTERFACE = new ethers.Interface(CONTRACT_ABI);
 
 
 async function ensureSharedProvider() {
@@ -100,14 +103,11 @@ export async function getCurrentContract() {
 }
 
 export async function readPrizePool() {
-  try {
-    const currentContract = await getReadContract();
-    if (!currentContract) throw new Error('Contract unavailable');
-    const raw = await currentContract.prizePool();
-    return Number(ethers.formatEther(raw || 0n));
-  } catch {
-    return null;
-  }
+  const raw = await readContractValue('prizePool');
+  if (raw === null) return null;
+
+  const formatted = Number(ethers.formatEther(raw || 0n));
+  return Number.isFinite(formatted) ? formatted : null;
 }
 
 export async function getRecentTicketEvents(limit = 15) {
@@ -118,8 +118,8 @@ export async function getRecentTicketEvents(limit = 15) {
 
   const normalizedLimit = Math.max(1, Math.min(Number(limit) || 15, 50));
   const latestBlockNumber = await provider.getBlockNumber();
-  const deploymentBlock = await resolveDeploymentBlock(provider);
-  const events = await fetchTicketEventsFromProvider(provider, normalizedLimit, deploymentBlock, latestBlockNumber);
+  const fromBlock = getHistoryStartBlock(latestBlockNumber);
+  const events = await fetchTicketEventsFromProvider(provider, normalizedLimit, fromBlock, latestBlockNumber);
 
   if (events.length === 0) {
     throw new Error('No TicketBought events found in contract history.');
@@ -130,7 +130,7 @@ export async function getRecentTicketEvents(limit = 15) {
 
 async function fetchTicketEventsFromProvider(provider, limit = 50, fromBlock = null, toBlock = null) {
   const latestBlock = Number.isFinite(toBlock) ? toBlock : await provider.getBlockNumber();
-  const batchSize = 5000;
+  const batchSize = LOG_QUERY_BATCH_SIZE;
   const minBlock = Number.isFinite(fromBlock) ? Math.max(0, fromBlock) : Math.max(0, latestBlock - 250000);
   const blockTimestamps = new Map();
   const events = [];
@@ -200,37 +200,38 @@ function parseTicketBoughtLog(log, index = 0) {
   }
 }
 
-async function resolveDeploymentBlock(provider) {
-  if (Number.isFinite(deploymentBlockCache)) {
-    return deploymentBlockCache;
+function getHistoryStartBlock(latestBlock) {
+  if (!Number.isFinite(latestBlock)) return CONTRACT_DEPLOYMENT_FLOOR_BLOCK;
+
+  return Math.max(CONTRACT_DEPLOYMENT_FLOOR_BLOCK, latestBlock - MAX_HISTORY_BLOCKS);
+}
+
+async function readContractValue(functionName, args = []) {
+  const currentContract = await getReadContract();
+  if (!currentContract) return null;
+
+  try {
+    if (typeof currentContract[functionName] === 'function') {
+      return await currentContract[functionName](...args);
+    }
+  } catch {
+    // Try a raw eth_call below. Some injected wallet providers are stricter
+    // around Contract method proxies than around plain RPC calls.
   }
 
   try {
-    const latest = await provider.getBlockNumber();
-    const latestCode = await provider.getCode(CONTRACT_ADDRESS, latest);
-    if (!latestCode || latestCode === '0x') {
-      return Math.max(0, latest - 2000000);
-    }
+    const provider = await getReadProvider();
+    if (!provider) return null;
 
-    let lo = 0;
-    let hi = latest;
-    while (lo < hi) {
-      const mid = Math.floor((lo + hi) / 2);
-      const code = await provider.getCode(CONTRACT_ADDRESS, mid);
-      if (code && code !== '0x') {
-        hi = mid;
-      } else {
-        lo = mid + 1;
-      }
-    }
-
-    deploymentBlockCache = lo;
-    return lo;
+    const data = LOTTERY_INTERFACE.encodeFunctionData(functionName, args);
+    const result = await provider.call({ to: CONTRACT_ADDRESS, data });
+    const [decoded] = LOTTERY_INTERFACE.decodeFunctionResult(functionName, result);
+    return decoded;
   } catch {
-    const latest = await provider.getBlockNumber();
-    return Math.max(0, latest - 2000000);
+    return null;
   }
 }
+
 
 
 export async function watchWinnerEvents(onWinner) {
@@ -300,27 +301,31 @@ export async function buyTicket(signer) {
 export async function getUserTickets(walletAddress) {
   if (!walletAddress) return 0;
 
-  try {
-    const currentContract = await getReadContract();
-    if (!currentContract) throw new Error('Contract unavailable');
-    const ticketCount = await currentContract.ticketsOf(walletAddress);
-    const directValue = Number(ticketCount || 0n);
-    return Number.isFinite(directValue) && directValue >= 0 ? directValue : 0;
-  } catch {
-    return 0;
-  }
+  const ticketCount = await readContractValue('ticketsOf', [walletAddress]);
+  const directValue = Number(ticketCount || 0n);
+  return Number.isFinite(directValue) && directValue >= 0 ? directValue : 0;
+}
+
+
+export async function getCurrentRound() {
+  const raw = await readContractValue('round');
+  const round = Number(raw || 0n);
+  return Number.isFinite(round) && round > 0 ? round : null;
 }
 
 export async function getTicketsCount() {
-  try {
-    const currentContract = await getReadContract();
-    if (!currentContract) throw new Error('Contract unavailable');
-    const raw = await currentContract.ticketsCount();
-    const directValue = Number(raw || 0n);
-    return Number.isFinite(directValue) && directValue >= 0 ? directValue : null;
-  } catch {
-    return null;
+  const raw = await readContractValue('ticketsCount');
+  const directValue = Number(raw || 0n);
+  if (Number.isFinite(directValue) && directValue >= 0) return directValue;
+
+  const pool = await readContractValue('prizePool');
+  const price = await readContractValue('ticketPrice');
+  if (pool !== null && price !== null && price > 0n) {
+    const derivedValue = Number(pool / price);
+    return Number.isFinite(derivedValue) && derivedValue >= 0 ? derivedValue : null;
   }
+
+  return null;
 }
 
 export async function getRecentWinners() {

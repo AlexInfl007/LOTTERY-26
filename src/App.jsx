@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, buyTicket, getUserTickets, getRecentWinners, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, getLiveFeedDiagnostics } from "./utils/ethersUtils";
+import { readPrizePool, buyTicket, getUserTickets, getRecentWinners, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, getLiveFeedDiagnostics, getCurrentRound } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -21,6 +21,7 @@ export default function App() {
   const [poolAmount, setPoolAmount] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
   const poolTarget = 1000000;
   const [ticketsBought, setTicketsBought] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
+  const [currentRound, setCurrentRound] = useState(null);
   const [myTickets, setMyTickets] = useState(0); // Initialize as 0, will be updated from contract when wallet is connected
   const [feed, setFeed] = useState([]);
   const [feedError, setFeedError] = useState("");
@@ -63,6 +64,7 @@ export default function App() {
     if (!address) {
       setPoolAmount(null);
       setTicketsBought(null);
+      setCurrentRound(null);
       setMyTickets(0);
       return;
     }
@@ -70,6 +72,11 @@ export default function App() {
     const updatedPool = await readPrizePool();
     if (typeof updatedPool === 'number') {
       setPoolAmount(updatedPool);
+    }
+
+    const updatedRound = await getCurrentRound();
+    if (typeof updatedRound === 'number') {
+      setCurrentRound(updatedRound);
     }
 
     const updatedTicketsCount = await getTicketsCount();
@@ -249,7 +256,7 @@ export default function App() {
                       <span className={styles.jackpotIcon}>💰</span>
                       {t("currentJackpot", "Текущий джекпот")}
                     </div>
-                    <div className={styles.roundLabel}>Round: 1</div>
+                    <div className={styles.roundLabel}>Round: {currentRound !== null ? currentRound : "*"}</div>
                   </div>
                   <div className={styles.subHeaderRow}>{t("ticketsBought", "Всего билетов")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
                 </div>
