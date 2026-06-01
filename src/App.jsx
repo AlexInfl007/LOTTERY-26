@@ -12,7 +12,7 @@ import LuckyButton from "./components/LuckyButton";
 
 import styles from "./styles/Home.module.css";
 import { updateSeo } from "./seo";
-import { readPrizePool, buyTicket, getUserTickets, getRecentWinners, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, getLiveFeedDiagnostics } from "./utils/ethersUtils";
+import { readPrizePool, buyTicket, getUserTickets, getRecentWinners, updateProvider, updateContractInstance, getTicketsCount, getRecentTicketEvents, getLiveFeedDiagnostics, getCurrentRound } from "./utils/ethersUtils";
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -21,6 +21,7 @@ export default function App() {
   const [poolAmount, setPoolAmount] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
   const poolTarget = 1000000;
   const [ticketsBought, setTicketsBought] = useState(null); // Initialize as null, will be updated from contract when wallet is connected
+  const [currentRound, setCurrentRound] = useState(null);
   const [myTickets, setMyTickets] = useState(0); // Initialize as 0, will be updated from contract when wallet is connected
   const [feed, setFeed] = useState([]);
   const [feedError, setFeedError] = useState("");
@@ -51,7 +52,7 @@ export default function App() {
     }
 
     const diagnostics = await getLiveFeedDiagnostics();
-    setFeedError(diagnostics?.reason || 'No events found and diagnostics unavailable.');
+    setFeedError(diagnostics?.ok ? t('liveFeedNoPurchases', 'Нет покупок') : diagnostics?.reason || t('liveFeedNoPurchases', 'Нет покупок'));
     return false;
   };
   const formatShortAddress = (address) => {
@@ -60,16 +61,14 @@ export default function App() {
   };
 
   const refreshLotteryData = async (address = walletAddress) => {
-    if (!address) {
-      setPoolAmount(null);
-      setTicketsBought(null);
-      setMyTickets(0);
-      return;
-    }
-
     const updatedPool = await readPrizePool();
     if (typeof updatedPool === 'number') {
       setPoolAmount(updatedPool);
+    }
+
+    const updatedRound = await getCurrentRound();
+    if (typeof updatedRound === 'number') {
+      setCurrentRound(updatedRound);
     }
 
     const updatedTicketsCount = await getTicketsCount();
@@ -82,9 +81,13 @@ export default function App() {
       }
     }
 
-    const updatedUserTickets = await getUserTickets(address);
-    if (typeof updatedUserTickets === 'number') {
-      setMyTickets(updatedUserTickets);
+    if (address) {
+      const updatedUserTickets = await getUserTickets(address);
+      if (typeof updatedUserTickets === 'number') {
+        setMyTickets(updatedUserTickets);
+      }
+    } else {
+      setMyTickets(null);
     }
   };
 
@@ -127,20 +130,7 @@ export default function App() {
       try {
         if (!mounted) return;
 
-        if (!walletAddress) {
-          setFeed([]);
-          setFeedError(t("connectWalletForLiveFeed", "Connect your wallet to load Live Feed from your wallet provider."));
-          setWinners([]);
-          setLoading(false);
-          return;
-        }
-
         await refreshLotteryData(walletAddress);
-
-        const recentWinners = await getRecentWinners();
-        if (mounted) {
-          setWinners(recentWinners);
-        }
 
         await seedFeedFromChain();
       } catch (error) {
@@ -249,7 +239,7 @@ export default function App() {
                       <span className={styles.jackpotIcon}>💰</span>
                       {t("currentJackpot", "Текущий джекпот")}
                     </div>
-                    <div className={styles.roundLabel}>Round: 1</div>
+                    <div className={styles.roundLabel}>Round: {currentRound !== null ? currentRound : "*"}</div>
                   </div>
                   <div className={styles.subHeaderRow}>{t("ticketsBought", "Всего билетов")}: {ticketsBought !== null ? ticketsBought : '*'}</div>
                 </div>
@@ -287,7 +277,7 @@ export default function App() {
                   <LuckyButton />
                 </div>
 
-                <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {!walletAddress ? '*' : myTickets}</div>
+                <div className={styles.ticketsInfo}>{t("myTickets", "Мои билеты")}: {walletAddress && myTickets !== null ? myTickets : '*'}</div>
               </section>
 
               <HowItWorks onReadMore={openAboutPage} />

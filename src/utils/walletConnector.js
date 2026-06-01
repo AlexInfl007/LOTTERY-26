@@ -2,17 +2,7 @@ import { ethers } from 'ethers';
 import { initializeContract } from '../../utils/contractManager';
 import { setSharedProvider } from './providerStore';
 
-const POLYGON_MAINNET_CONFIG = {
-  chainId: '0x89',
-  chainName: 'Polygon Mainnet',
-  nativeCurrency: {
-    name: 'POL',
-    symbol: 'POL',
-    decimals: 18
-  },
-  rpcUrls: ['https://polygon-bor-rpc.publicnode.com', 'https://rpc.ankr.com/polygon'],
-  blockExplorerUrls: ['https://polygonscan.com/']
-};
+const POLYGON_CHAIN_ID_HEX = '0x89';
 
 const WALLET_DEFINITIONS = [
   { key: 'metamask', name: 'MetaMask', icon: '🦊', matcher: (provider) => provider?.isMetaMask && !provider?.isBraveWallet && !provider?.isCoinbaseWallet && !provider?.isTrustWallet },
@@ -32,34 +22,6 @@ const EIP6963_EVENT_REQUEST = 'eip6963:requestProvider';
 let walletCache = [];
 const eip6963ProviderMap = new Map();
 let announcedListenerAttached = false;
-
-async function isProviderUnlocked(ethereum) {
-  if (!ethereum) return false;
-
-  const isMetaMaskProvider = Boolean(ethereum?.isMetaMask);
-
-  try {
-    const unlockApi = ethereum?._metamask?.isUnlocked;
-    if (typeof unlockApi === 'function') {
-      return await unlockApi.call(ethereum._metamask);
-    }
-  } catch {
-    return false;
-  }
-
-  if (isMetaMaskProvider) {
-    const internalUnlockedState = ethereum?._state?.isUnlocked;
-    if (typeof internalUnlockedState === 'boolean') {
-      return internalUnlockedState;
-    }
-
-    // For MetaMask we must be strict: if unlock status can't be confirmed,
-    // treat provider as locked to avoid false "connected" state in UI.
-    return false;
-  }
-
-  return true;
-}
 
 function safeReadStorage(key) {
   if (typeof window === 'undefined') return null;
@@ -273,20 +235,12 @@ export const switchToPolygonNetwork = async (ethereumProvider) => {
   try {
     await ethereumProvider.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: POLYGON_MAINNET_CONFIG.chainId }],
+      params: [{ chainId: POLYGON_CHAIN_ID_HEX }],
     });
     return true;
   } catch (switchError) {
     if (switchError.code === 4902) {
-      try {
-        await ethereumProvider.request({
-          method: 'wallet_addEthereumChain',
-          params: [POLYGON_MAINNET_CONFIG],
-        });
-        return true;
-      } catch (addError) {
-        throw addError;
-      }
+      throw new Error('Polygon Mainnet is not added in this wallet. Add Polygon in the wallet and try again.');
     } else if (switchError.code === -32002) {
       throw new Error('Network switch request already pending. Please check your wallet and approve/reject the existing request.');
     } else {
@@ -370,9 +324,6 @@ export const restoreWalletSession = async () => {
     const ethereum = await getPreferredProvider();
     if (!ethereum) return null;
 
-    const unlocked = await isProviderUnlocked(ethereum);
-    if (!unlocked) return null;
-
     const accounts = await ethereum.request({ method: 'eth_accounts' });
     if (!accounts || accounts.length === 0) {
       return null;
@@ -427,9 +378,6 @@ export const isWalletConnected = async () => {
     const ethereum = await getPreferredProvider();
     if (!ethereum) return false;
 
-    const unlocked = await isProviderUnlocked(ethereum);
-    if (!unlocked) return false;
-
     const accounts = await ethereum.request({ method: 'eth_accounts' });
     if (!accounts || accounts.length === 0) return false;
 
@@ -451,9 +399,6 @@ export const getCurrentWalletAddress = async () => {
   try {
     const ethereum = await getPreferredProvider();
     if (!ethereum) return null;
-
-    const unlocked = await isProviderUnlocked(ethereum);
-    if (!unlocked) return null;
 
     const accounts = await ethereum.request({ method: 'eth_accounts' });
     if (!accounts || accounts.length === 0) return null;
